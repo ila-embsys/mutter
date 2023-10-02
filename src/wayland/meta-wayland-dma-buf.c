@@ -691,10 +691,10 @@ meta_wayland_dma_buf_try_acquire_scanout (MetaWaylandBuffer     *buffer,
   format_info = meta_format_info_from_drm_format (dma_buf->drm_format);
   g_assert (format_info);
 
-  if (format_info->opaque_substitute != DRM_FORMAT_INVALID &&
+  if (FALSE /*format_info->opaque_substitute != DRM_FORMAT_INVALID &&
       crtc_supports_modifier (crtc_kms,
                               format_info->opaque_substitute,
-                              dma_buf->drm_modifier))
+                              dma_buf->drm_modifier)*/)
     {
       drm_format = format_info->opaque_substitute;
     }

@@ -45,6 +45,7 @@ struct _CoglScanout
   GObject parent;
 
   CoglScanoutBuffer *scanout_buffer;
+  uint32_t plane_id;
 
   gboolean has_src_rect;
   graphene_rect_t src_rect;
@@ -146,6 +147,19 @@ cogl_scanout_get_dst_rect (CoglScanout  *scanout,
                            MtkRectangle *dst_rect)
 {
   *dst_rect = scanout->dst_rect;
+}
+
+uint32_t
+cogl_scanout_get_plane_id (CoglScanout *scanout)
+{
+  return scanout->plane_id;
+}
+
+void
+cogl_scanout_set_plane_id (CoglScanout *scanout,
+                           uint32_t     plane_id)
+{
+  scanout->plane_id = plane_id;
 }
 
 static void
