@@ -2075,7 +2075,7 @@ meta_window_x11_constructed (GObject *object)
   priv->user_time_window = None;
 
   window->decorated = TRUE;
-  window->hidden = FALSE;
+  window->hidden = TRUE;
   priv->border_width = attrs.border_width;
   priv->xclient_leader = None;
 
