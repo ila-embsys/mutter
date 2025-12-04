@@ -5990,6 +5990,7 @@ meta_window_recalc_features (MetaWindow *window)
    */
   if (meta_window_is_fullscreen (window))
     {
+      window->decorated = FALSE;
       window->has_move_func = FALSE;
       window->has_resize_func = FALSE;
       window->has_maximize_func = FALSE;
