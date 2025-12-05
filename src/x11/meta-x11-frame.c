@@ -53,8 +53,16 @@ G_DEFINE_AUTOPTR_CLEANUP_FUNC (MetaFrame, meta_frame_free);
 void
 meta_window_ensure_frame (MetaWindow *window)
 {
+  MetaWindowX11 *window_x11 = META_WINDOW_X11 (window);
+  MetaWindowX11Private *priv = meta_window_x11_get_private (window_x11);
   MetaX11Display *x11_display = window->display->x11_display;
   unsigned long data[1] = { 1 };
+
+  if(priv->frame)
+  {
+    meta_topic (META_DEBUG_X11, "MOHAN: Window already has a frame");
+    return;
+  }
 
   mtk_x11_error_trap_push (x11_display->xdisplay);
 

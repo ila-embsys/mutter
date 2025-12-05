@@ -516,10 +516,18 @@ meta_window_x11_manage (MetaWindow *window)
   if (!window->override_redirect)
     update_sm_hints (window); /* must come after transient_for */
 
-  if (window->decorated)
+  if (window->decorated && !meta_window_is_fullscreen (window))
+  {
+    meta_topic (META_DEBUG_X11,
+                  "MOHAN: ensuring Window frame for %s", window->desc);
     meta_window_ensure_frame (window);
+  }
   else
+  {
+    meta_topic (META_DEBUG_X11,
+                  "MOHAN: Disabling Window frame for %s", window->desc);
     meta_window_x11_initialize_state (window);
+  }
 }
 
 void

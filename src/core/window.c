@@ -924,8 +924,12 @@ client_window_should_be_mapped (MetaWindow *window)
 
 #ifdef HAVE_X11_CLIENT
   if (window->client_type == META_WINDOW_CLIENT_TYPE_X11 &&
-      window->decorated && !meta_window_x11_is_ssd (window))
-    return FALSE;
+      window->decorated && !meta_window_is_fullscreen (window) && !meta_window_x11_is_ssd (window))
+    {
+      meta_topic (META_DEBUG_X11,
+                  "MOHAN: Client should not be mapped");
+      return FALSE;
+    }
 #endif
 
   return TRUE;
@@ -1918,6 +1922,14 @@ meta_window_should_be_showing (MetaWindow *window)
 {
   MetaWorkspaceManager *workspace_manager = window->display->workspace_manager;
   MetaWorkspace *active_workspace = workspace_manager->active_workspace;
+
+  if (window->client_type == META_WINDOW_CLIENT_TYPE_X11 &&
+      window->decorated && !meta_window_is_fullscreen (window) && !meta_window_x11_is_ssd (window))
+    {
+      meta_topic (META_DEBUG_X11,
+                  "MOHAN: Window %s should not be showing", window->desc);
+      return FALSE;
+    }
 
   return meta_window_should_be_showing_on_workspace (window, active_workspace);
 }
@@ -5746,6 +5758,24 @@ meta_window_update_struts (MetaWindow *window)
 }
 
 static void
+sync_needs_frame (MetaWindow *window)
+{
+  if (window->decorated && !meta_window_is_fullscreen (window))
+  {
+    meta_topic (META_DEBUG_X11,
+                  "MOHAN: Syncing to ensure frame");
+    meta_window_ensure_frame (window);
+  }
+  else
+  {
+    meta_topic (META_DEBUG_X11,
+                  "MOHAN: Syncing to destroy frame");
+    meta_window_destroy_frame (window);
+  }
+}
+
+
+static void
 meta_window_type_changed (MetaWindow *window)
 {
   gboolean old_decorated = window->decorated;
@@ -5761,10 +5791,7 @@ meta_window_type_changed (MetaWindow *window)
   if (window->client_type == META_WINDOW_CLIENT_TYPE_X11)
     {
       /* Update frame */
-      if (window->decorated)
-        meta_window_ensure_frame (window);
-      else
-        meta_window_destroy_frame (window);
+      sync_needs_frame (window);
     }
 #endif
 
@@ -6058,6 +6085,7 @@ meta_window_recalc_features (MetaWindow *window)
   if (window->has_resize_func != old_has_resize_func)
     g_object_notify_by_pspec (G_OBJECT (window), obj_props[PROP_RESIZEABLE]);
 
+  sync_needs_frame (window);
   meta_window_frame_size_changed (window);
 }
 
