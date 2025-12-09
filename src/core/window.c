@@ -809,8 +809,11 @@ client_window_should_be_mapped (MetaWindow *window)
 #endif
 
   if (window->client_type == META_WINDOW_CLIENT_TYPE_X11 &&
-      window->decorated && !window->frame)
-    return FALSE;
+      window->decorated && !window->fullscreen && !window->frame)
+    {
+      meta_warning ("cLient_window_should_be_mapped: decorated X11 window without frame");
+      return FALSE;
+    }
 
   return TRUE;
 }
@@ -1776,6 +1779,14 @@ meta_window_should_be_showing (MetaWindow *window)
 {
   MetaWorkspaceManager *workspace_manager = window->display->workspace_manager;
   MetaWorkspace *active_workspace = workspace_manager->active_workspace;
+
+  if (window->client_type == META_WINDOW_CLIENT_TYPE_X11 &&
+      window->decorated && !window->fullscreen && !window->frame)
+    {
+      meta_warning ("Window %s is decorated but has no frame; cannot be shown",
+                   window->desc);
+      return FALSE;
+    }
 
   return meta_window_should_be_showing_on_workspace (window, active_workspace);
 }
@@ -5471,6 +5482,21 @@ meta_window_update_struts (MetaWindow *window)
 }
 
 static void
+sync_needs_frame (MetaWindow *window)
+{
+  if (window->decorated && !window->fullscreen)
+  {
+    meta_warning ("Ensuring frame for window %s", window->desc);
+    meta_window_ensure_frame (window);
+  }
+  else
+  {
+    meta_warning ("Destroying frame for window %s", window->desc);
+    meta_window_destroy_frame (window);
+  }
+}
+
+static void
 meta_window_type_changed (MetaWindow *window)
 {
   gboolean old_decorated = window->decorated;
@@ -5483,10 +5509,7 @@ meta_window_type_changed (MetaWindow *window)
     set_net_wm_state (window);
 
   /* Update frame */
-  if (window->decorated)
-    meta_window_ensure_frame (window);
-  else
-    meta_window_destroy_frame (window);
+  sync_needs_frame (window);
 
   /* update stacking constraints */
   meta_window_update_layer (window);
@@ -5760,6 +5783,7 @@ meta_window_recalc_features (MetaWindow *window)
   if (window->has_resize_func != old_has_resize_func)
     g_object_notify_by_pspec (G_OBJECT (window), obj_props[PROP_RESIZEABLE]);
 
+  sync_needs_frame (window);
   meta_window_frame_size_changed (window);
 }
 

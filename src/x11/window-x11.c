@@ -570,10 +570,16 @@ meta_window_x11_manage (MetaWindow *window)
   if (!window->override_redirect)
     update_sm_hints (window); /* must come after transient_for */
 
-  if (window->decorated)
+  if (window->decorated && !window->fullscreen)
+  {
+    meta_warning ("Ensuring frame for x11 window %s", window->desc);
     meta_window_ensure_frame (window);
+  }
   else
+  {
+    meta_warning ("Not framing x11 window %s", window->desc);
     meta_window_x11_initialize_state (window);
+  }
 }
 
 void
