@@ -31,9 +31,14 @@
 #include "clutter/clutter.h"
 #include "compositor/compositor-private.h"
 #include "compositor/meta-window-actor-private.h"
+#include "compositor/meta-window-actor-wayland.h"
 #include "compositor/meta-surface-actor-wayland.h"
 #include "core/window-private.h"
 #include "wayland/meta-wayland-surface-private.h"
+#include "wayland/meta-wayland-buffer.h"
+
+#include <pixman.h>
+#include "mtk/mtk-region.h"
 
 static void update_fullscreen_actor (MetaCompositorViewNative *view_native,
                                      MetaSurfaceActor         *fullscreen_actor);
@@ -197,6 +202,201 @@ find_candidate (MetaCompositorView *compositor_view,
   return surface_actor;
 }
 
+static gboolean surfaceHasDMABufAttribs (MetaWaylandSurface *surface)
+{
+  if (!surface)
+    return FALSE;
+
+  MetaWaylandBuffer *buffer = meta_wayland_surface_get_buffer (surface);
+
+  if (!buffer)
+    return FALSE;
+
+  return buffer->type == META_WAYLAND_BUFFER_TYPE_DMA_BUF && buffer->dma_buf.dma_buf != NULL;
+}
+
+static gboolean region_intersects_rect (MtkRegion *region, MtkRectangle *rect)
+{
+  return mtk_region_contains_rectangle (region, rect) != MTK_REGION_OVERLAP_OUT;
+}
+
+static void map_rect_to_device_space (MetaCompositorView *compositor_view,
+                                      ClutterActor *clutter_actor,
+                                      MtkRectangle *device_space_rect)
+{
+  ClutterStageView *stage_view = meta_compositor_view_get_stage_view (compositor_view);
+  graphene_rect_t actor_rect;
+
+  clutter_actor_get_transformed_extents (clutter_actor, &actor_rect);
+
+  float device_scale = clutter_stage_view_get_scale (stage_view);
+
+  *device_space_rect = (MtkRectangle) {
+    .x = (int) floorf (actor_rect.origin.x * device_scale),
+    .y = (int) floorf (actor_rect.origin.y * device_scale),
+    .width = (int) floorf (actor_rect.size.width * device_scale),
+    .height = (int) floorf (actor_rect.size.height * device_scale)
+  };
+}
+
+static void map_region_to_device_space (MetaCompositorView *compositor_view,
+                                        ClutterActor *clutter_actor,
+                                        MtkRegion *region,
+                                        MtkRegion **device_space_region)
+{
+  MtkRegionBuilder builder;
+  mtk_region_builder_init (&builder);
+
+  int num_rectangles = mtk_region_num_rectangles (region);
+
+  for(int i = 0; i < num_rectangles; i++)
+    {
+      MtkRectangle rect = mtk_region_get_rectangle (region, i);
+      map_rect_to_device_space (compositor_view, clutter_actor, &rect);
+      mtk_region_builder_add_rectangle (&builder, rect.x, rect.y, rect.width, rect.height);
+    }
+
+  *device_space_region = mtk_region_builder_finish (&builder);
+}
+
+gboolean find_overlay_candidates (MetaCompositorView *compositor_view,
+                                  MetaCompositor     *compositor,
+                                  ClutterActor       *clutter_actor, 
+                                  MtkRegion          *occupied_region,
+                                  MtkRegion          *opaque_region,
+                                // TODO may be it needs effected Region as well
+                                  GList              **overlay_candidates,
+                                  GList              **underlay_candidates
+                                // TODO maybe it needs to keep track window corners for better candidate selection
+                                        )
+{
+  ClutterStageView* stage_view;
+  ClutterActorBox actor_bounding_box;
+  MtkRectangle view_rect;
+
+  stage_view = meta_compositor_view_get_stage_view (compositor_view);
+  clutter_actor_get_content_box (clutter_actor, &actor_bounding_box);
+  clutter_stage_view_get_layout (stage_view, &view_rect);
+
+  graphene_rect_t graphene_view_rect;
+  graphene_rect_t graphene_actor_rect_projected;
+  graphene_view_rect = mtk_rectangle_to_graphene_rect (&view_rect);
+  clutter_actor_get_transformed_extents (clutter_actor, &graphene_actor_rect_projected);
+
+  gboolean is_visible = clutter_actor_is_visible (clutter_actor);
+  guint8 opacity = clutter_actor_get_opacity (clutter_actor);
+  gfloat actor_area = clutter_actor_box_get_area (&actor_bounding_box);
+  bool intersects = graphene_rect_intersection (&graphene_view_rect, &graphene_actor_rect_projected, NULL);
+  if (!is_visible ||
+      opacity == 0 ||
+      actor_area == 0.0 ||
+      !intersects)
+    {
+      meta_topic (META_DEBUG_RENDER,
+                  "No overlay candidate: window is hidden or transparent or has no content");
+      return TRUE;
+    }
+  
+  MtkRectangle device_space_actor_rect;
+  MtkRegion *device_space_opaque_region = mtk_region_create();
+
+  MetaWindowActor* window_actor = NULL;
+  MetaSurfaceActor* surface_actor = NULL;
+  MetaSurfaceActorWayland *surface_actor_wayland = NULL;
+  MetaWaylandSurface *surface = NULL;
+
+  if( META_IS_WINDOW_ACTOR (clutter_actor) )
+  {
+    window_actor = META_WINDOW_ACTOR (clutter_actor);
+    // surface_actor = meta_window_actor_get_surface (window_actor);
+    surface_actor = meta_window_actor_get_scanout_candidate (window_actor);
+    surface_actor_wayland = META_SURFACE_ACTOR_WAYLAND (surface_actor);
+    surface = meta_surface_actor_wayland_get_surface (surface_actor_wayland);
+  }
+
+  gboolean has_surface_actor = surface_actor != NULL;
+  gboolean has_dmabuf_attribs = FALSE;
+  gboolean is_fully_opaque = FALSE;
+  guint8 actor_opacity = 0;
+  MtkRegionOverlap opaque_region_overlap;
+  gboolean notCoveredByOpaque;
+
+  map_rect_to_device_space (compositor_view, clutter_actor, &device_space_actor_rect);
+  opaque_region_overlap = mtk_region_contains_rectangle (opaque_region, &device_space_actor_rect);
+  notCoveredByOpaque = (opaque_region_overlap != MTK_REGION_OVERLAP_IN);
+
+  if (has_surface_actor)
+    {
+      has_dmabuf_attribs = surfaceHasDMABufAttribs (surface);
+      is_fully_opaque = meta_surface_actor_is_opaque (surface_actor);
+
+      map_region_to_device_space (compositor_view,
+                                  clutter_actor,
+                                  meta_surface_actor_get_opaque_region (surface_actor),
+                                  &device_space_opaque_region);
+    }
+
+    /* TODO maybe check whether the associated window has any additional
+       shader effects and exclude if it causes issues on overlay planes */
+
+    // TODO Check the window's children potential candidates for overlay planes
+
+    // TODO check whether surface updates frequently
+    // TODO check whether effected region is intersects with device rect
+
+    if (has_surface_actor &&
+        has_dmabuf_attribs &&
+        is_fully_opaque &&
+        notCoveredByOpaque)
+      {
+        gboolean is_occupied_intersects = region_intersects_rect (occupied_region, &device_space_actor_rect);
+        if (is_occupied_intersects)
+          {
+            gboolean is_opaque = mtk_region_contains_rectangle (device_space_opaque_region, &device_space_actor_rect) == MTK_REGION_OVERLAP_IN;
+            if (!is_opaque)
+                return FALSE;
+            meta_topic (META_DEBUG_MOHAN, "Adding Underlay Candidate (%#x): (%dx%d)", clutter_actor, (int) clutter_actor_box_get_width (&actor_bounding_box), (int) clutter_actor_box_get_height (&actor_bounding_box));
+            *underlay_candidates = g_list_prepend (*underlay_candidates, surface_actor);
+          }
+        else {
+          meta_topic (META_DEBUG_MOHAN, "Adding Overlay Candidate (%#x): (%dx%d)", clutter_actor, (int) clutter_actor_box_get_width (&actor_bounding_box), (int) clutter_actor_box_get_height (&actor_bounding_box));
+          *overlay_candidates = g_list_prepend (*overlay_candidates, surface_actor);
+        }
+        // TODO check if overlay & underlay candidates exceeds overlay and underlay plane limits
+      }
+    else {
+//      meta_topic (META_DEBUG_MOHAN, "Adding Candidate (%#x) to Occupied Region: Rect: (%dx%d)", clutter_actor, (int) clutter_actor_box_get_width (&actor_bounding_box), (int) clutter_actor_box_get_height (&actor_bounding_box));
+//      meta_topic (META_DEBUG_MOHAN, "HasSurfaceActor: %d HasDmaBuf: %d IsFullyOpaque: %d notCoveredOpaque: %d", has_surface_actor, has_dmabuf_attribs, is_fully_opaque, notCoveredByOpaque);
+      mtk_region_union_rectangle (occupied_region, &device_space_actor_rect);
+    }
+
+//    meta_topic (META_DEBUG_MOHAN, "Adding Candidate (%#x) to Opaque Region: %d, %d, (%dx%d)", clutter_actor, mtk_region_get_extents(device_space_opaque_region).x, mtk_region_get_extents(device_space_opaque_region).y, mtk_region_get_extents(device_space_opaque_region).width, mtk_region_get_extents(device_space_opaque_region).height );
+    mtk_region_union (opaque_region, device_space_opaque_region);
+    
+    *overlay_candidates = g_list_reverse (*overlay_candidates);
+    *underlay_candidates = g_list_reverse (*underlay_candidates);
+  
+    GList* children = clutter_actor_get_children (clutter_actor);
+
+    for(GList* iter = children; iter != NULL; iter = iter->next)
+      {
+        ClutterActor *child_actor = CLUTTER_ACTOR (iter->data);
+
+        if (child_actor)
+          {
+            if (!find_overlay_candidates (compositor_view, compositor,
+                                          (child_actor),
+                                          occupied_region, opaque_region,
+                                          overlay_candidates, underlay_candidates))
+              {
+                return FALSE;
+              }
+          }
+      }
+
+  return TRUE;
+}
+
 static gboolean
 find_scanout_candidate (MetaCompositorView  *compositor_view,
                         MetaCompositor      *compositor,
@@ -222,7 +422,25 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
   if (meta_get_debug_paint_flags () & META_DEBUG_PAINT_DISABLE_DIRECT_SCANOUT)
     return FALSE;
 
-
+  GList* window_actors = meta_compositor_get_window_actors (compositor);
+  MtkRegion* occupied_region = mtk_region_create();
+  MtkRegion* opaque_region = mtk_region_create();
+  GList* overlay_candidates = NULL;
+  GList* underlay_candidates = NULL;
+  GList* reverse_iter = NULL;
+  
+  meta_topic (META_DEBUG_MOHAN, "Finding Overlay Candidates for Window Group: %d window actors", g_list_length (window_actors));
+  for (reverse_iter = g_list_last (window_actors); reverse_iter != NULL; reverse_iter = reverse_iter->prev)
+    {
+      ClutterActor *clutter_actor = CLUTTER_ACTOR (reverse_iter->data);
+      find_overlay_candidates (compositor_view, compositor,
+                               clutter_actor,
+                               occupied_region, opaque_region,
+                               &overlay_candidates, &underlay_candidates);
+      // meta_topic (META_DEBUG_MOHAN, "Next Candidate Tree");
+    }
+   meta_topic (META_DEBUG_MOHAN, "Overlay Candidates: %d Underlay Candidates: %d", g_list_length (overlay_candidates), g_list_length (underlay_candidates));
+   meta_topic (META_DEBUG_MOHAN, "***** -- Finished Candidate Findings -- *****");
   surface_actor = find_candidate (compositor_view,
                                   compositor,
                                   "direct scanout");
