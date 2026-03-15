@@ -702,6 +702,14 @@ test_cases += [
     ],
   },
   {
+    'name': 'find-overlay-candidates',
+    'suite': 'backends/native',
+    'sources': [
+      'native-kms-overlay-candidates.c',
+      wayland_test_utils,
+    ],
+  },
+  {
     'name': 'remote-desktop-tests',
     'suite': 'backends/native',
     'sources': [
@@ -861,6 +869,14 @@ kms_test_cases = [
       wayland_test_utils,
     ],
   },
+  #{
+  #  'name': 'kms-overlay-candidates',
+  #  'suite': 'backends/native',
+  #  'sources': [
+  #    'native-kms-overlay-candidates.c',
+  #    wayland_test_utils,
+  #  ],
+  #},
   {
     'name': 'drm-lease-monitor',
     'suite': 'backends/native',
