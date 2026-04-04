@@ -107,3 +107,8 @@ void meta_kms_plane_update_set_color_range (MetaKmsPlane                *plane,
                                             MetaKmsPlaneYCbCrColorRange  range);
 
 const char * meta_kms_plane_type_to_string (MetaKmsPlaneType plane_type);
+
+void meta_kms_plane_set_assigned (MetaKmsPlane *plane, gboolean assigned);
+
+gboolean meta_kms_plane_is_assigned (MetaKmsPlane *plane);
+

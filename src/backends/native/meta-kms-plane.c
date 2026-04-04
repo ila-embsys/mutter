@@ -63,6 +63,8 @@ struct _MetaKmsPlane
   MetaKmsPlanePropTable prop_table;
 
   MetaKmsDevice *device;
+
+  gboolean is_assigned;
 };
 
 #ifndef HAVE_DRM_PLANE_SIZE_HINT
@@ -760,6 +762,7 @@ meta_kms_plane_new (MetaKmsPlaneType         type,
   plane->id = drm_plane->plane_id;
   plane->possible_crtcs = drm_plane->possible_crtcs;
   plane->device = meta_kms_impl_device_get_device (impl_device);
+  plane->is_assigned = FALSE;
 
   meta_topic (META_DEBUG_KMS,
               "Adding %s plane %u (%s)",
@@ -847,4 +850,14 @@ meta_kms_plane_type_to_string (MetaKmsPlaneType plane_type)
     }
 
   g_assert_not_reached ();
+}
+
+void meta_kms_plane_set_assigned (MetaKmsPlane *plane, gboolean assigned)
+{
+  plane->is_assigned = assigned;
+}
+
+gboolean meta_kms_plane_is_assigned (MetaKmsPlane *plane)
+{
+  return plane->is_assigned;
 }

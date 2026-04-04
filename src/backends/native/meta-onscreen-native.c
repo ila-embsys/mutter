@@ -2242,6 +2242,9 @@ meta_onscreen_native_is_buffer_scanout_compatible (CoglOnscreen *onscreen,
       if (!meta_kms_plane_is_usable_with (kms_plane, kms_crtc))
         continue;
 
+      if (meta_kms_plane_is_assigned (kms_plane))
+        continue;
+
       test_update = meta_kms_update_new (kms_device);
       assign_plane (crtc_kms,
                     kms_plane,
@@ -2259,6 +2262,7 @@ meta_onscreen_native_is_buffer_scanout_compatible (CoglOnscreen *onscreen,
         {
           cogl_scanout_set_plane_id (scanout,
                                      meta_kms_plane_get_id (kms_plane));
+          meta_kms_plane_set_assigned (kms_plane, TRUE);
           return TRUE;
         }
 

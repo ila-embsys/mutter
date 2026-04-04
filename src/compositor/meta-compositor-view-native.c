@@ -28,6 +28,8 @@
 #include "backends/meta-crtc.h"
 #include "backends/native/meta-crtc-kms.h"
 #include "backends/native/meta-onscreen-native.h"
+#include "backends/native/meta-kms-plane.h"
+#include "backends/native/meta-kms-device.h"
 #include "clutter/clutter.h"
 #include "compositor/compositor-private.h"
 #include "compositor/meta-window-actor-private.h"
@@ -397,6 +399,7 @@ gboolean find_overlay_candidates (MetaCompositorView *compositor_view,
   return TRUE;
 }
 
+#if 0
 static gboolean
 find_scanout_candidate (MetaCompositorView  *compositor_view,
                         MetaCompositor      *compositor,
@@ -429,7 +432,7 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
   GList* underlay_candidates = NULL;
   GList* reverse_iter = NULL;
   
-  meta_topic (META_DEBUG_MOHAN, "Finding Overlay Candidates for Window Group: %d window actors", g_list_length (window_actors));
+  meta_topic (META_DEBUG_MOHAN, "***** -- Finding Overlay Candidates for Window Group: %d window actors -- *****", g_list_length (window_actors));
   for (reverse_iter = g_list_last (window_actors); reverse_iter != NULL; reverse_iter = reverse_iter->prev)
     {
       ClutterActor *clutter_actor = CLUTTER_ACTOR (reverse_iter->data);
@@ -441,12 +444,12 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
     }
    meta_topic (META_DEBUG_MOHAN, "Overlay Candidates: %d Underlay Candidates: %d", g_list_length (overlay_candidates), g_list_length (underlay_candidates));
    meta_topic (META_DEBUG_MOHAN, "***** -- Finished Candidate Findings -- *****");
-  surface_actor = find_candidate (compositor_view,
+  /*surface_actor = find_candidate (compositor_view,
                                   compositor,
                                   "direct scanout");
   if (!surface_actor)
     return FALSE;
-
+  */
   if (meta_cursor_renderer_needs_overlay (cursor_renderer) &&
       !meta_stage_view_is_cursor_overlay_inhibited (view) &&
       meta_cursor_tracker_get_pointer_visible (cursor_tracker))
@@ -562,6 +565,77 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
 
   return TRUE;
 }
+#else
+
+static gboolean
+find_scanout_candidate (MetaCompositorView  *compositor_view,
+                        MetaCompositor      *compositor,
+                        MetaCrtc           **crtc_out,
+                        CoglOnscreen       **onscreen_out,
+                        GList** overlay_candidates_out)
+{
+  ClutterStageView *stage_view =
+    meta_compositor_view_get_stage_view (compositor_view);
+  MetaStageView *view = META_STAGE_VIEW (stage_view);
+  MetaRendererView *renderer_view = META_RENDERER_VIEW (stage_view);
+  MetaCrtc *crtc;
+  CoglFramebuffer *framebuffer;
+
+  if (meta_get_debug_paint_flags () & META_DEBUG_PAINT_DISABLE_DIRECT_SCANOUT)
+    return FALSE;
+
+  GList* window_actors = meta_compositor_get_window_actors (compositor);
+  MtkRegion* occupied_region = mtk_region_create();
+  MtkRegion* opaque_region = mtk_region_create();
+  GList* overlay_candidates = NULL;
+  GList* underlay_candidates = NULL;
+  GList* iter = NULL;
+  
+  meta_topic (META_DEBUG_MOHAN, "***** -- Finding Overlay Candidates for Window Group: %d window actors -- *****", g_list_length (window_actors));
+  for (iter = g_list_last (window_actors); iter != NULL; iter = iter->prev)
+    {
+      ClutterActor *clutter_actor = CLUTTER_ACTOR (iter->data);
+      find_overlay_candidates (compositor_view, compositor,
+                               clutter_actor,
+                               occupied_region, opaque_region,
+                               &overlay_candidates, &underlay_candidates);
+      // meta_topic (META_DEBUG_MOHAN, "Next Candidate Tree");
+    }
+  meta_topic (META_DEBUG_MOHAN, "Overlay Candidates: %d Underlay Candidates: %d", g_list_length (overlay_candidates), g_list_length (underlay_candidates));
+  meta_topic (META_DEBUG_MOHAN, "***** -- Finished Candidate Findings -- *****");
+  
+  crtc = meta_renderer_view_get_crtc (renderer_view);
+  if (!META_IS_CRTC_KMS (crtc))
+    {
+      meta_topic (META_DEBUG_RENDER,
+                  "No direct scanout candidate: no KMS CRTC");
+      return FALSE;
+    }
+
+  framebuffer = clutter_stage_view_get_onscreen (stage_view);
+  if (!COGL_IS_ONSCREEN (framebuffer))
+    {
+      meta_topic (META_DEBUG_RENDER,
+                  "No direct scanout candidate: no onscreen framebuffer");
+      return FALSE;
+    }
+
+  if (clutter_stage_view_has_shadowfb (stage_view))
+    {
+      meta_topic (META_DEBUG_RENDER,
+                  "No direct scanout candidate: stage-view has shadowfb");
+      return FALSE;
+    }
+  
+  /* TODO Add Mutter's Post Candidate Selection cases*/
+
+  *crtc_out = crtc;
+  *onscreen_out = COGL_ONSCREEN (framebuffer);
+  *overlay_candidates_out = overlay_candidates;
+
+  return *overlay_candidates_out != NULL;
+}
+#endif
 
 static void
 try_assign_next_scanout (MetaCompositorView *compositor_view,
@@ -586,6 +660,7 @@ try_assign_next_scanout (MetaCompositorView *compositor_view,
   clutter_stage_view_assign_next_scanout (stage_view, scanout);
 }
 
+#if 0
 void
 meta_compositor_view_native_maybe_assign_scanout (MetaCompositorViewNative *view_native,
                                                   MetaCompositor           *compositor)
@@ -610,6 +685,64 @@ meta_compositor_view_native_maybe_assign_scanout (MetaCompositorViewNative *view
 
   update_scanout_candidate (view_native, surface, crtc);
 }
+#else
+
+void RefreshPlaneAssignation (MetaCompositorView  *compositor_view)
+{
+  ClutterStageView *stage_view =
+    meta_compositor_view_get_stage_view (compositor_view);
+  MetaStageView *view = META_STAGE_VIEW (stage_view);
+  MetaRendererView *renderer_view = META_RENDERER_VIEW (stage_view); 
+
+  MetaCrtc *crtc = meta_renderer_view_get_crtc (renderer_view);
+
+  MetaGpuKms *gpu_kms = META_GPU_KMS (meta_crtc_get_gpu (crtc));
+  MetaKmsDevice *kms_device = meta_gpu_kms_get_kms_device (gpu_kms);
+  GList *l;
+
+  for (l = meta_kms_device_get_planes (kms_device); l; l = l->next)
+    {
+      MetaKmsPlane *plane = META_KMS_PLANE (l->data);
+      meta_kms_plane_set_assigned(plane, FALSE);
+    }
+}
+
+void
+meta_compositor_view_native_maybe_assign_scanout (MetaCompositorViewNative *view_native,
+                                                  MetaCompositor           *compositor)
+{
+  MetaCompositorView *compositor_view = META_COMPOSITOR_VIEW (view_native);
+  MetaCrtc *crtc = NULL;
+  CoglOnscreen *onscreen = NULL;
+  GList* overlay_candidates = NULL;
+  gboolean candidate_found;
+
+  candidate_found = find_scanout_candidate (compositor_view,
+                                            compositor,
+                                            &crtc,
+                                            &onscreen,
+                                            &overlay_candidates);
+  
+  if (candidate_found)
+    {
+      GList* iter = NULL;
+
+      RefreshPlaneAssignation (compositor_view);
+      for(iter = overlay_candidates; iter != NULL; iter = iter->next)
+        {
+          MetaSurfaceActor* surface_actor = (MetaSurfaceActor*) iter->data;
+          MetaWaylandSurface* surface = meta_surface_actor_wayland_get_surface (META_SURFACE_ACTOR_WAYLAND (surface_actor));
+
+          try_assign_next_scanout (compositor_view,
+                                    onscreen,
+                                    surface);
+          
+          update_scanout_candidate (view_native, surface, crtc);
+        }
+    }
+}
+
+#endif
 
 static MetaSurfaceActor *
 find_fullscreen_candidate (MetaCompositorView *compositor_view,
