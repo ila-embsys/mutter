@@ -41,6 +41,7 @@
 #include "cogl/cogl-frame-info-private.h"
 #include "core/util-private.h"
 #include "meta/meta-backend.h"
+#include "backends/native/meta-drm-buffer.h"
 
 #define MAX_STACK_RECTS 256
 
@@ -738,10 +739,12 @@ meta_stage_impl_redraw_view_primary (MetaStageImpl    *stage_impl,
 static gboolean
 meta_stage_impl_scanout_view (MetaStageImpl     *stage_impl,
                               ClutterStageView  *stage_view,
-                              CoglScanout       *scanout,
+                              GList              *scanout_list,
                               ClutterFrame      *frame,
                               GError           **error)
 {
+  // meta_topic (META_DEBUG_MOHAN, "meta_stage_impl_scanout_view: scanout_list=%p", scanout_list);
+
   MetaStageImplPrivate *priv =
     meta_stage_impl_get_instance_private (stage_impl);
   CoglFramebuffer *framebuffer =
@@ -758,7 +761,7 @@ meta_stage_impl_scanout_view (MetaStageImpl     *stage_impl,
                                     frame->frame_count);
 
   if (!cogl_onscreen_direct_scanout (onscreen,
-                                     scanout,
+                                     scanout_list,
                                      frame_info,
                                      frame,
                                      error))
@@ -772,18 +775,45 @@ meta_stage_impl_scanout_view (MetaStageImpl     *stage_impl,
 }
 
 static void
+calc_scanout_region (GList* scanout_list,
+                     MtkRegion **scanout_region_out)
+{
+  MtkRegion *scanout_region = mtk_region_create ();
+
+  for (GList *l = scanout_list; l; l = l->next)
+    {
+      CoglScanout *scanout = l->data;
+      MtkRectangle scanout_rect;
+      
+      CoglScanoutBuffer* scanout_buffer = cogl_scanout_get_buffer(scanout);
+/*      if(scanout_buffer)
+      {
+        MetaDrmBuffer* buffer = META_DRM_BUFFER (cogl_scanout_get_buffer(scanout));
+        meta_topic (META_DEBUG_MOHAN, "Scanout buffer while calc region: %u", buffer ? meta_drm_buffer_get_fb_id(buffer) : 0);
+      }*/
+      cogl_scanout_get_dst_rect (scanout, &scanout_rect);
+      mtk_region_union_rectangle (scanout_region, &scanout_rect);
+    }
+  
+  *scanout_region_out = scanout_region;
+}
+
+static void
 meta_stage_impl_redraw_view (ClutterStageWindow *stage_window,
                              ClutterStageView   *stage_view,
                              ClutterFrame       *frame)
 {
+  // meta_topic (META_DEBUG_MOHAN, "meta_stage_impl_redraw_view: stage_view");
   MetaStageImpl *stage_impl = META_STAGE_IMPL (stage_window);
-  g_autoptr (CoglScanout) scanout = NULL;
+  GList *scanout_list = NULL;
 
-  scanout = clutter_stage_view_take_scanout (stage_view);
-  if (scanout)
+  scanout_list = clutter_stage_view_take_scanout (stage_view);
+#if 0
+  if (scanout_list)
     {
       const MtkRegion *redraw_clip;
       MtkRectangle redraw_clip_rect;
+      MtkRegion *scanout_region = NULL;
       MtkRectangle scanout_rect;
 
       redraw_clip = clutter_stage_view_peek_redraw_clip (stage_view);
@@ -791,15 +821,24 @@ meta_stage_impl_redraw_view (ClutterStageWindow *stage_window,
         redraw_clip_rect = mtk_region_get_extents (redraw_clip);
       else
         clutter_stage_view_get_layout (stage_view, &redraw_clip_rect);
-      cogl_scanout_get_dst_rect (scanout, &scanout_rect);
+      calc_scanout_region (scanout_list, &scanout_region);
+      if (scanout_region)
+        scanout_rect = mtk_region_get_extents (scanout_region);
 
+      meta_topic (META_DEBUG_MOHAN,
+                  "Scanout Request: scanout_rect=(%d,%d,%dx%d) redraw_clip_rect=(%d,%d,%dx%d)",
+                  scanout_rect.x, scanout_rect.y,
+                  scanout_rect.width, scanout_rect.height,
+                  redraw_clip_rect.x, redraw_clip_rect.y,
+                  redraw_clip_rect.width, redraw_clip_rect.height);
       if (mtk_rectangle_contains_rect (&scanout_rect, &redraw_clip_rect))
         {
           g_autoptr (GError) error = NULL;
-
+          
+          meta_topic (META_DEBUG_MOHAN, "Going for Scanout");
           if (meta_stage_impl_scanout_view (stage_impl,
                                             stage_view,
-                                            scanout,
+                                            scanout_list,
                                             frame,
                                             &error))
             {
@@ -821,7 +860,8 @@ meta_stage_impl_redraw_view (ClutterStageWindow *stage_window,
         }
       else
         {
-          meta_topic (META_DEBUG_RENDER,
+          // TODO switch debug keys to META_DEBUG_RENDER
+          meta_topic (META_DEBUG_MOHAN,
                       "Skipping scanout: redraw clip (%d,%d,%d,%d) exceeds "
                       "scanout area (%d,%d,%d,%d)",
                       redraw_clip_rect.x, redraw_clip_rect.y,
@@ -830,7 +870,56 @@ meta_stage_impl_redraw_view (ClutterStageWindow *stage_window,
                       scanout_rect.width, scanout_rect.height);
         }
     }
+#else
 
+/*
+  if (scanout_list)
+*/
+  if( g_list_length(scanout_list) > 0  )
+  {
+    MtkRegion *scanout_region = NULL;
+    MtkRectangle scanout_rect;
+    calc_scanout_region (scanout_list, &scanout_region);
+
+    if (scanout_region)
+      scanout_rect = mtk_region_get_extents (scanout_region);
+    
+    meta_topic (META_DEBUG_MOHAN,
+                "Scanout Request: scanout_rect=(%d,%d,%dx%d)",
+                scanout_rect.x, scanout_rect.y,
+                scanout_rect.width, scanout_rect.height);
+
+    g_autoptr (GError) error = NULL;
+
+    meta_topic (META_DEBUG_MOHAN, "Going for Scanout");
+    if (meta_stage_impl_scanout_view (stage_impl,
+                                      stage_view,
+                                      scanout_list,
+                                      frame,
+                                      &error))
+      {
+        clutter_stage_view_accumulate_redraw_clip (stage_view);
+        return;
+      }
+    
+    if (g_error_matches (error,
+                               COGL_SCANOUT_ERROR,
+                               COGL_SCANOUT_ERROR_INHIBITED))
+      {
+        meta_topic (META_DEBUG_RENDER,
+                    "Skipping scanout: inhibited");
+      }
+    else
+      {
+        g_warning ("Failed to scan out client buffer: %s", error->message);
+      }
+  }
+  else
+  {
+    meta_topic (META_DEBUG_RENDER,
+                    "Skipping scanout: no scanout candidates");
+  }
+#endif
   meta_stage_impl_redraw_view_primary (stage_impl, stage_view, frame);
 }
 

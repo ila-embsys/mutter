@@ -72,7 +72,8 @@ struct _CoglOnscreenClass
                                 const MtkRegion *region);
 
   gboolean (* direct_scanout) (CoglOnscreen   *onscreen,
-                               CoglScanout    *scanout,
+                               //CoglScanout    *scanout,
+                               GList* scanout_list,
                                CoglFrameInfo  *info,
                                gpointer        user_data,
                                GError        **error);
@@ -221,7 +222,7 @@ cogl_onscreen_swap_buffers_with_damage (CoglOnscreen    *onscreen,
  */
 COGL_EXPORT gboolean
 cogl_onscreen_direct_scanout (CoglOnscreen   *onscreen,
-                              CoglScanout    *scanout,
+                              GList          *scanout_list,
                               CoglFrameInfo  *info,
                               gpointer        user_data,
                               GError        **error);

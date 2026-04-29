@@ -599,6 +599,9 @@ on_scanout_failed (CoglScanout       *scanout,
                    CoglOnscreen      *onscreen,
                    MetaWaylandBuffer *buffer)
 {
+  MtkRectangle dst_rect;
+  cogl_scanout_get_dst_rect(scanout, &dst_rect);
+  meta_topic (META_DEBUG_MOHAN, "Scanout Failed for buffer with Size: %d,%d,%dx%d", dst_rect.x, dst_rect.y, dst_rect.width, dst_rect.height);
   if (!buffer->tainted_scanout_onscreens)
     buffer->tainted_scanout_onscreens = g_hash_table_new (NULL, NULL);
 

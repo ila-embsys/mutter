@@ -85,6 +85,8 @@ typedef enum
   META_DEBUG_X11             = 1 << 28,
   META_DEBUG_WORKSPACES      = 1 << 29,
   META_DEBUG_MOHAN           = 1 << 30,
+  META_DEBUG_MOHAN_KMS       = 1 << 31,
+  META_DEBUG_MOHAN_WAYLAND   = (1 << 31) | (1 << 30),
 } MetaDebugTopic;
 
 META_EXPORT

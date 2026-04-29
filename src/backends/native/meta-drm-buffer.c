@@ -32,6 +32,7 @@
 
 #include "meta-private-enum-types.h"
 
+#include <xf86drm.h>
 #define INVALID_FB_ID 0U
 
 enum
@@ -96,6 +97,16 @@ meta_drm_buffer_do_ensure_fb_id (MetaDrmBuffer        *buffer,
   if (!(priv->flags & META_DRM_BUFFER_FLAG_DISABLE_MODIFIERS) &&
       fb_args->modifiers[0] != DRM_FORMAT_MOD_INVALID)
     {
+
+      meta_topic(META_DEBUG_MOHAN_KMS, "[drm] AddFB2 with args: fb_width:%d fb_height:%d fb_format:%s",
+                 fb_args->width, fb_args->height, drmGetFormatName(fb_args->format));
+      /*
+      for (uint32_t i = 0; i < fb_args->planecount; i++)
+      {
+        meta_topic(META_DEBUG_MOHAN_KMS, "[drm] AddFB2 with args: fb_modifier: %s", drmGetFormatModifierName(fb_args->modifiers[i]));
+      }
+      */
+
       if (drmModeAddFB2WithModifiers (fd,
                                       fb_args->width,
                                       fb_args->height,
@@ -182,6 +193,7 @@ static void
 meta_drm_buffer_release_fb_id (MetaDrmBuffer *buffer)
 {
   MetaDrmBufferPrivate *priv = meta_drm_buffer_get_instance_private (buffer);
+  // meta_topic (META_DEBUG_MOHAN, "meta_drm_buffer_release_fb_id: buffer=%p priv:%p fb_id: %u", buffer, priv, priv->fb_id);
   int fd;
   int ret;
 
@@ -216,6 +228,7 @@ uint32_t
 meta_drm_buffer_get_fb_id (MetaDrmBuffer *buffer)
 {
   MetaDrmBufferPrivate *priv = meta_drm_buffer_get_instance_private (buffer);
+  // meta_topic (META_DEBUG_MOHAN, "meta_drm_buffer_get_fb_id: buffer=%p priv:%p fb_id: %u", buffer, priv, priv->fb_id);
 
   return priv->fb_id;
 }
