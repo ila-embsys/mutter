@@ -73,6 +73,8 @@ static const GDebugKey meta_debug_keys[] = {
   { "x11", META_DEBUG_X11 },
   { "workspaces", META_DEBUG_WORKSPACES },
   { "mohan", META_DEBUG_MOHAN },
+  { "mohan-kms", META_DEBUG_MOHAN_KMS },
+  { "mohan-wayland", META_DEBUG_MOHAN_WAYLAND },
 };
 
 static const GDebugKey meta_paint_debug_keys[] = {
@@ -433,6 +435,10 @@ meta_topic_to_string (MetaDebugTopic topic)
       return "WORKSPACES";
     case META_DEBUG_MOHAN:
       return "MOHAN";
+    case META_DEBUG_MOHAN_KMS:
+      return "MOHAN_KMS";
+    case META_DEBUG_MOHAN_WAYLAND:
+      return "MOHAN_WAYLAND";
     }
 
   return "WM";

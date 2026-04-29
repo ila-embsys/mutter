@@ -31,6 +31,7 @@ struct _MetaFrameNative
 
   MetaDrmBuffer *buffer;
   CoglScanout *scanout;
+  GList* scanout_list;
 
   MetaKmsUpdate *kms_update;
 
@@ -43,11 +44,14 @@ static void
 meta_frame_native_release (ClutterFrame *frame)
 {
   MetaFrameNative *frame_native = meta_frame_native_from_frame (frame);
+  // meta_topic (META_DEBUG_MOHAN, "meta_frame_native_release: frame=%p Scanout_list:%p", frame_native, frame_native->scanout_list);
 
   g_clear_fd (&frame_native->sync.fd, NULL);
   g_clear_pointer (&frame_native->damage, mtk_region_unref);
   g_clear_object (&frame_native->buffer);
   g_clear_object (&frame_native->scanout);
+  g_list_free_full (frame_native->scanout_list, g_object_unref);
+  //g_clear_object (&frame_native->scanout_list);
 
   g_return_if_fail (!frame_native->kms_update);
 }
@@ -58,6 +62,7 @@ meta_frame_native_new (void)
   MetaFrameNative *frame_native =
     clutter_frame_new (MetaFrameNative, meta_frame_native_release);
 
+  // meta_topic (META_DEBUG_MOHAN, "meta_frame_native_new: frame_native=%p", frame_native);
   frame_native->sync.fd = -1;
   frame_native->sync.events = 0;
 
@@ -107,20 +112,40 @@ meta_frame_native_set_buffer (MetaFrameNative *frame_native,
 MetaDrmBuffer *
 meta_frame_native_get_buffer (MetaFrameNative *frame_native)
 {
+#if 1
+  if(frame_native->scanout_list)
+  {
+    CoglScanout* scanout = frame_native->scanout_list->data;
+    MetaDrmBuffer* buffer = META_DRM_BUFFER (cogl_scanout_get_buffer(scanout));
+    // meta_topic (META_DEBUG_MOHAN, "meta_frame_native_get_buffer: Scanout_list=%p, buffer=%p", frame_native->scanout_list, buffer);
+    return buffer;
+  }
+  else
+  {
+    // meta_topic (META_DEBUG_MOHAN, "meta_frame_native_get_buffer: primary buffer=%p", frame_native->buffer);
+    return frame_native->buffer;
+  }
+#else
   return frame_native->buffer;
+#endif
 }
 
 void
 meta_frame_native_set_scanout (MetaFrameNative *frame_native,
-                               CoglScanout     *scanout)
+                               GList     *scanout_list)
 {
-  g_set_object (&frame_native->scanout, scanout);
+  // g_set_object (&frame_native->scanout, scanout);
+  //g_set_object (&frame_native->scanout_list, scanout_list);
+  // frame_native->scanout_list = g_steal_pointer (&scanout_list);
+  frame_native->scanout_list = scanout_list;
+  // meta_topic (META_DEBUG_MOHAN, "meta_frame_native_set_scanout: frame_native:%p scanout_list=%p", frame_native, frame_native->scanout_list);
+  //meta_topic (META_DEBUG_MOHAN, "meta_frame_native_set_scanout done");
 }
 
-CoglScanout *
+GList*
 meta_frame_native_get_scanout (MetaFrameNative *frame_native)
 {
-  return frame_native->scanout;
+  return frame_native->scanout_list;
 }
 
 void

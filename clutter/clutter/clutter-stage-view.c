@@ -85,6 +85,7 @@ typedef struct _ClutterStageViewPrivate
 
   CoglScanout *next_scanout;
 
+  GList *scanout_list;
   gboolean has_redraw_clip;
   MtkRegion *redraw_clip;
   gboolean has_accumulated_redraw_clip;
@@ -848,6 +849,7 @@ clutter_stage_view_accumulate_redraw_clip (ClutterStageView *view)
   priv->has_redraw_clip = FALSE;
 }
 
+#if 0
 void
 clutter_stage_view_assign_next_scanout (ClutterStageView *view,
                                         CoglScanout      *scanout)
@@ -866,6 +868,29 @@ clutter_stage_view_take_scanout (ClutterStageView *view)
 
   return g_steal_pointer (&priv->next_scanout);
 }
+#else
+void
+clutter_stage_view_assign_next_scanout (ClutterStageView *view,
+                                        CoglScanout      *scanout)
+{
+  ClutterStageViewPrivate *priv =
+    clutter_stage_view_get_instance_private (view);
+
+  priv->scanout_list = g_list_append (priv->scanout_list, scanout);
+
+  /* ADDED this just not to break things */
+  g_set_object (&priv->next_scanout, priv->scanout_list->data);
+}
+
+GList *
+clutter_stage_view_take_scanout (ClutterStageView *view)
+{
+  ClutterStageViewPrivate *priv =
+    clutter_stage_view_get_instance_private (view);
+
+  return g_steal_pointer (&priv->scanout_list);
+}
+#endif
 
 /**
  * clutter_stage_view_peek_scanout: (skip)
