@@ -81,6 +81,10 @@ void clutter_stage_view_assign_next_scanout (ClutterStageView *stage_view,
                                              CoglScanout      *scanout);
 
 CLUTTER_EXPORT
+void clutter_stage_view_assign_scanout (ClutterStageView *stage_view,
+                                        GList            *scanout_list);
+
+CLUTTER_EXPORT
 gboolean clutter_actor_has_damage (ClutterActor *actor);
 
 CLUTTER_EXPORT
