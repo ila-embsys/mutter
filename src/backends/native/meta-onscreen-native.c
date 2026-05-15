@@ -2452,6 +2452,90 @@ meta_onscreen_native_is_buffer_scanout_compatible (CoglOnscreen *onscreen,
   return FALSE;
 }
 
+gboolean meta_onscreen_native_is_scanout_candidates_compatible (CoglOnscreen *onscreen,
+                                                                GList        *scanout_candidates)
+{
+  MetaOnscreenNative *onscreen_native = META_ONSCREEN_NATIVE (onscreen);
+  MetaCrtc *crtc = onscreen_native->crtc;
+  MetaCrtcKms *crtc_kms = META_CRTC_KMS (crtc);
+  MetaGpuKms *gpu_kms;
+  MetaKmsDevice *kms_device;
+  MetaKmsCrtc *kms_crtc;
+  MetaKmsUpdate *test_update;
+  MetaDrmBuffer *buffer;
+  g_autoptr (MetaKmsFeedback) kms_feedback = NULL;
+  MetaKmsFeedbackResult result = META_KMS_FEEDBACK_FAILED;
+  graphene_rect_t src_rect;
+  MtkRectangle dst_rect;
+  MetaKmsPlane *kms_plane;
+  GList *l;
+  GList *iter;
+  const GError *error;
+
+  gpu_kms = META_GPU_KMS (meta_crtc_get_gpu (crtc));
+  kms_device = meta_gpu_kms_get_kms_device (gpu_kms);
+  kms_crtc = meta_crtc_kms_get_kms_crtc (crtc_kms);
+
+  test_update = meta_kms_update_new (kms_device);
+
+  for (iter = scanout_candidates; iter; iter = iter->next)
+    {
+      CoglScanout *scanout = iter->data;
+      buffer = META_DRM_BUFFER (cogl_scanout_get_buffer (scanout));
+      cogl_scanout_get_src_rect (scanout, &src_rect);
+      cogl_scanout_get_dst_rect (scanout, &dst_rect);
+
+      for (l = meta_kms_device_get_planes (kms_device); l; l = l->next)
+        {
+          kms_plane = l->data;
+
+          if (meta_kms_plane_get_plane_type (kms_plane) != META_KMS_PLANE_TYPE_OVERLAY)
+            continue;
+
+          if (!meta_kms_plane_is_usable_with (kms_plane, kms_crtc))
+            continue;
+
+          if (meta_kms_plane_is_assigned (kms_plane))
+            continue;
+
+          assign_plane (crtc_kms,
+                        kms_plane,
+                        buffer,
+                        test_update,
+                        META_KMS_ASSIGN_PLANE_FLAG_DISABLE_IMPLICIT_SYNC,
+                        &src_rect,
+                        &dst_rect);
+
+          cogl_scanout_set_plane_id (scanout,
+                                     meta_kms_plane_get_id (kms_plane));
+          meta_kms_plane_set_assigned (kms_plane, TRUE);
+
+          break;
+        }
+    }
+
+    kms_feedback =
+        meta_kms_device_process_update_sync (kms_device, test_update,
+                                             META_KMS_UPDATE_FLAG_TEST_ONLY);
+
+    result = meta_kms_feedback_get_result (kms_feedback);
+
+    if (result == META_KMS_FEEDBACK_PASSED)
+      {
+        return TRUE;
+      }
+
+    g_list_free_full (scanout_candidates, g_object_unref);
+
+    error = meta_kms_feedback_get_error (kms_feedback);
+    meta_topic (META_DEBUG_KMS,
+                "Test update for overlay plane %d failed: %s",
+                meta_kms_plane_get_id (kms_plane),
+                error ? error->message : NULL);
+    
+  return FALSE;
+}
+
 static void
 scanout_result_feedback (const MetaKmsFeedback *kms_feedback,
                          gpointer               user_data)

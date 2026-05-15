@@ -882,6 +882,18 @@ clutter_stage_view_assign_next_scanout (ClutterStageView *view,
   g_set_object (&priv->next_scanout, priv->scanout_list->data);
 }
 
+void clutter_stage_view_assign_scanout (ClutterStageView *stage_view,
+                                        GList            *scanout_list)
+{
+  ClutterStageViewPrivate *priv =
+    clutter_stage_view_get_instance_private (stage_view);
+
+  priv->scanout_list = g_steal_pointer (&scanout_list);
+
+  /* ADDED this just not to break things */
+  g_set_object (&priv->next_scanout, priv->scanout_list ? priv->scanout_list->data : NULL);
+}
+
 GList *
 clutter_stage_view_take_scanout (ClutterStageView *view)
 {

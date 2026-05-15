@@ -795,13 +795,15 @@ meta_wayland_dma_buf_try_acquire_scanout (MetaWaylandBuffer     *buffer,
                               dst_rect);
   cogl_scanout_set_src_rect (scanout, src_rect);
 
+  /*
   if (!meta_onscreen_native_is_buffer_scanout_compatible (onscreen, scanout))
     {
       meta_topic (META_DEBUG_RENDER,
                   "Buffer not scanout compatible (see also KMS debug topic)");
       return NULL;
     }
-
+  */
+ 
   return g_steal_pointer (&scanout);
 #else
   return NULL;

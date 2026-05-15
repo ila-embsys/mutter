@@ -46,6 +46,9 @@ void meta_onscreen_native_dummy_power_save_page_flip (CoglOnscreen *onscreen);
 gboolean meta_onscreen_native_is_buffer_scanout_compatible (CoglOnscreen *onscreen,
                                                             CoglScanout  *scanout);
 
+gboolean meta_onscreen_native_is_scanout_candidates_compatible (CoglOnscreen *onscreen,
+                                                                GList        *scanout_candidates);
+
 void meta_onscreen_native_discard_pending_swaps (CoglOnscreen *onscreen);
 
 void meta_onscreen_native_set_view (CoglOnscreen     *onscreen,

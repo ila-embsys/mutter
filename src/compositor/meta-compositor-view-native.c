@@ -732,6 +732,58 @@ try_assign_next_scanout (MetaCompositorView *compositor_view,
   clutter_stage_view_assign_next_scanout (stage_view, scanout);
 }
 
+static void
+try_assign_scanout_candidates (MetaCompositorView *compositor_view,
+                               CoglOnscreen       *onscreen,
+                               GList              *scanout_candidates)
+{
+  if (!scanout_candidates)
+    return;
+
+  ClutterStageView *stage_view;
+
+  stage_view = meta_compositor_view_get_stage_view (compositor_view);
+
+  if(!meta_onscreen_native_is_scanout_candidates_compatible (onscreen, scanout_candidates))
+  {
+    meta_topic (META_DEBUG_RENDER,
+                "Scanout candidates are not compatible with the onscreen");
+    return;
+  }
+
+  meta_topic (META_DEBUG_RENDER, "Assigning scanout to stage view");
+  clutter_stage_view_assign_scanout (stage_view, scanout_candidates);
+}
+
+static void
+acquire_scanout_for_candidates (MetaCompositorView *compositor_view,
+                                CoglOnscreen       *onscreen,
+                                GList              *overlay_candidates,
+                                GList              **scanout_candidates_out)
+{
+  ClutterStageView *stage_view;
+  
+  GList* iter = NULL;
+
+  stage_view = meta_compositor_view_get_stage_view (compositor_view);
+
+  for(iter = overlay_candidates; iter != NULL; iter = iter->next)
+    {
+      MetaSurfaceActor* surface_actor = iter->data;
+      MetaWaylandSurface* surface = meta_surface_actor_wayland_get_surface (META_SURFACE_ACTOR_WAYLAND (surface_actor));
+      CoglScanout *scanout = NULL;
+
+      scanout = meta_wayland_surface_try_acquire_scanout (surface,
+                                                          onscreen,
+                                                          stage_view);
+
+      if (scanout)
+        {
+          *scanout_candidates_out = g_list_prepend (*scanout_candidates_out, scanout);
+        }
+    }
+}
+
 #if 0
 void
 meta_compositor_view_native_maybe_assign_scanout (MetaCompositorViewNative *view_native,
@@ -797,18 +849,11 @@ meta_compositor_view_native_maybe_assign_scanout (MetaCompositorViewNative *view
   
   if (candidate_found)
     {
-      GList* iter = NULL;
+      GList* scanout_candidates = NULL;
 
       RefreshPlaneAssignation (compositor_view);
-      for(iter = overlay_candidates; iter != NULL; iter = iter->next)
-        {
-          MetaSurfaceActor* surface_actor = (MetaSurfaceActor*) iter->data;
-          MetaWaylandSurface* surface = meta_surface_actor_wayland_get_surface (META_SURFACE_ACTOR_WAYLAND (surface_actor));
-
-          try_assign_next_scanout (compositor_view,
-                                    onscreen,
-                                    surface);                    
-        }
+      acquire_scanout_for_candidates (compositor_view, onscreen, overlay_candidates, &scanout_candidates);
+      try_assign_scanout_candidates (compositor_view, onscreen, scanout_candidates);
     }
 
   update_scanout_candidate (view_native, overlay_candidates, crtc);
