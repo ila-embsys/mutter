@@ -333,7 +333,9 @@ static void map_region_to_device_space (MetaCompositorView *compositor_view,
 
 gboolean find_overlay_candidates (MetaCompositorView *compositor_view,
                                   MetaCompositor     *compositor,
-                                  ClutterActor       *clutter_actor, 
+                                  ClutterActor       *clutter_actor,
+                                  guint32             max_scanout_count,
+                                  guint32             max_overlay_count,
                                   MtkRegion          *occupied_region,
                                   MtkRegion          *opaque_region,
                                 // TODO may be it needs effected Region as well
@@ -435,7 +437,12 @@ gboolean find_overlay_candidates (MetaCompositorView *compositor_view,
           meta_wayland_dma_buf_supported_planes (meta_wayland_surface_get_buffer (surface), stage_view);
           *overlay_candidates = g_list_prepend (*overlay_candidates, surface_actor);
         }
-        // TODO check if overlay & underlay candidates exceeds overlay and underlay plane limits
+        // TODO Also Check Max Scanout & Underlay Count once underlay is considered
+        if (g_list_length (*overlay_candidates) > max_overlay_count)
+          {
+            meta_topic (META_DEBUG_MOHAN, "Plane Budget exhausted: Overlay: %d MaxOverlay: %d", g_list_length (*overlay_candidates), max_overlay_count);
+            return FALSE;
+          }
       }
     else {
 //      meta_topic (META_DEBUG_MOHAN, "Adding Candidate (%#x) to Occupied Region: Rect: (%dx%d)", clutter_actor, (int) clutter_actor_box_get_width (&actor_bounding_box), (int) clutter_actor_box_get_height (&actor_bounding_box));
@@ -459,6 +466,8 @@ gboolean find_overlay_candidates (MetaCompositorView *compositor_view,
           {
             if (!find_overlay_candidates (compositor_view, compositor,
                                           (child_actor),
+                                          max_scanout_count,
+                                          max_overlay_count,
                                           occupied_region, opaque_region,
                                           overlay_candidates, underlay_candidates))
               {
@@ -638,12 +647,44 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
 }
 #else
 
+static void
+probe_plane_budget (MetaCompositorView  *compositor_view,
+                    guint32             *max_scanout_plane_count,
+                    guint32             *overlay_plane_count)
+{
+  ClutterStageView *stage_view =
+    meta_compositor_view_get_stage_view (compositor_view);
+  MetaStageView *view = META_STAGE_VIEW (stage_view);
+  MetaRendererView *renderer_view = META_RENDERER_VIEW (stage_view);
+  MetaCrtcKms *crtc_kms = META_CRTC_KMS (meta_renderer_view_get_crtc (renderer_view));
+  MetaKmsCrtc *kms_crtc = meta_crtc_kms_get_kms_crtc (crtc_kms);
+  MetaKmsDevice *kms_device = meta_kms_crtc_get_device (kms_crtc);
+
+  GList *planes = meta_kms_device_get_planes (kms_device);
+  GList *iter = NULL;
+
+  *max_scanout_plane_count = 0;
+  *overlay_plane_count = 0;
+
+  // TODO Need to consider budget for underlays
+  // TODO Maybe determine plane budget based on ZPos property of KMS planes
+  for (iter = planes; iter != NULL; iter = iter->next)
+    {
+      MetaKmsPlane *kms_plane = iter->data;
+
+      if (meta_kms_plane_get_plane_type (kms_plane) == META_KMS_PLANE_TYPE_OVERLAY)
+        (*overlay_plane_count)++;
+    }
+
+  *max_scanout_plane_count = *overlay_plane_count;
+}
+
 static gboolean
 find_scanout_candidate (MetaCompositorView  *compositor_view,
                         MetaCompositor      *compositor,
                         MetaCrtc           **crtc_out,
                         CoglOnscreen       **onscreen_out,
-                        GList** overlay_candidates_out)
+                        GList              **overlay_candidates_out)
 {
   ClutterStageView *stage_view =
     meta_compositor_view_get_stage_view (compositor_view);
@@ -658,18 +699,31 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
   GList* window_actors = meta_compositor_get_window_actors (compositor);
   MtkRegion* occupied_region = mtk_region_create();
   MtkRegion* opaque_region = mtk_region_create();
+  guint32 max_scanout_count;
+  guint32 max_overlay_count;
   GList* overlay_candidates = NULL;
   GList* underlay_candidates = NULL;
   GList* iter = NULL;
   
+  probe_plane_budget (compositor_view, &max_scanout_count, &max_overlay_count);
   meta_topic (META_DEBUG_MOHAN, "***** -- Finding Overlay Candidates for Window Group: %d window actors -- *****", g_list_length (window_actors));
+  meta_topic (META_DEBUG_MOHAN, "Plane Budget: %d scanout planes %d overlay planes", max_scanout_count, max_overlay_count);
   for (iter = g_list_last (window_actors); iter != NULL; iter = iter->prev)
     {
       ClutterActor *clutter_actor = CLUTTER_ACTOR (iter->data);
-      find_overlay_candidates (compositor_view, compositor,
-                               clutter_actor,
-                               occupied_region, opaque_region,
-                               &overlay_candidates, &underlay_candidates);
+      if (!find_overlay_candidates (compositor_view, compositor,
+                                     clutter_actor,
+                                     max_scanout_count,
+                                     max_overlay_count,
+                                     occupied_region, opaque_region,
+                                     &overlay_candidates, &underlay_candidates))
+        {
+          // Fallback to Gfx compositing
+          meta_topic (META_DEBUG_MOHAN, "Falling back to Gfx Compositing");
+          g_list_free (overlay_candidates);
+          g_list_free (underlay_candidates);
+          return FALSE;
+        }
       // meta_topic (META_DEBUG_MOHAN, "Next Candidate Tree");
     }
   meta_topic (META_DEBUG_MOHAN, "Overlay Candidates: %d Underlay Candidates: %d", g_list_length (overlay_candidates), g_list_length (underlay_candidates));
