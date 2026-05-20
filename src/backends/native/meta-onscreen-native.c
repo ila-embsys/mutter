@@ -848,6 +848,18 @@ assign_plane_by_id (MetaCrtcKms            *crtc_kms,
                        dst_rect);
 }
 
+static int
+scanout_plane_compare (gconstpointer a, gconstpointer b)
+{
+  const CoglScanout *current_scanout = a;
+  const CoglScanout *target_scanout  = b;
+
+  if(cogl_scanout_get_plane_id(current_scanout) == cogl_scanout_get_plane_id(target_scanout))
+    return 0;
+  else
+    return -1;
+}
+
 static gboolean
 meta_onscreen_native_flip_crtc (CoglOnscreen           *onscreen,
                                 ClutterFrame           *frame,
@@ -922,22 +934,14 @@ meta_onscreen_native_flip_crtc (CoglOnscreen           *onscreen,
               GList* presented_iter;
               CoglScanout* presented_scanout;
               meta_topic (META_DEBUG_KMS, "Unsetting previously used overlay plane(s) for presented frame");
-              for(presented_iter = scanout_presented, iter = scanout_list; iter && presented_iter; presented_iter = presented_iter->next, iter = iter->next)
+
+              for(presented_iter = scanout_presented; presented_iter != NULL; presented_iter = presented_iter->next)
                 {
-                  current_scanout = iter->data;
                   presented_scanout = presented_iter->data;
-                  uint32_t plane_id_presented;
-                  uint32_t plane_id_next = 0;
-
-                  plane_id_presented = cogl_scanout_get_plane_id (presented_scanout);
-  
-                  if (current_scanout)
-                    plane_id_next = cogl_scanout_get_plane_id (current_scanout);
-
-                  if (plane_id_presented != plane_id_next)
+                  if(!g_list_find_custom (scanout_list, presented_scanout, scanout_plane_compare))
                     {
                       plane_assignment = assign_plane_by_id (crtc_kms,
-                                                             plane_id_presented,
+                                                             cogl_scanout_get_plane_id (presented_scanout),
                                                              NULL,
                                                              kms_update,
                                                              0,
