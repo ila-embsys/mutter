@@ -338,7 +338,7 @@ gboolean find_overlay_candidates (MetaCompositorView *compositor_view,
                                   guint32             max_overlay_count,
                                   MtkRegion          *occupied_region,
                                   MtkRegion          *opaque_region,
-                                // TODO may be it needs effected Region as well
+                                  MtkRegion          *effected_region,
                                   GList              **overlay_candidates,
                                   GList              **underlay_candidates
                                 // TODO maybe it needs to keep track window corners for better candidate selection
@@ -382,6 +382,14 @@ gboolean find_overlay_candidates (MetaCompositorView *compositor_view,
   if( META_IS_WINDOW_ACTOR (clutter_actor) )
   {
     window_actor = META_WINDOW_ACTOR (clutter_actor);
+
+    if( meta_window_actor_effect_in_progress (window_actor) )
+      {
+        map_rect_to_device_space (compositor_view, clutter_actor, &device_space_actor_rect);
+        mtk_region_union_rectangle (effected_region, &device_space_actor_rect);
+        return TRUE;
+      }
+
     surface_actor = meta_window_actor_get_scanout_candidate (window_actor);
     if (surface_actor)
       {
@@ -401,10 +409,12 @@ gboolean find_overlay_candidates (MetaCompositorView *compositor_view,
   guint8 actor_opacity = 0;
   MtkRegionOverlap opaque_region_overlap;
   gboolean notCoveredByOpaque;
+  gboolean notIntersectsEffected;
 
   map_rect_to_device_space (compositor_view, clutter_actor, &device_space_actor_rect);
   opaque_region_overlap = mtk_region_contains_rectangle (opaque_region, &device_space_actor_rect);
   notCoveredByOpaque = (opaque_region_overlap != MTK_REGION_OVERLAP_IN);
+  notIntersectsEffected = !region_intersects_rect (effected_region, &device_space_actor_rect);
 
   if (has_surface_actor)
     {
@@ -428,7 +438,8 @@ gboolean find_overlay_candidates (MetaCompositorView *compositor_view,
     if (has_surface_actor &&
         has_dmabuf_attribs &&
         is_fully_opaque &&
-        notCoveredByOpaque)
+        notCoveredByOpaque &&
+        notIntersectsEffected)
       {
         gboolean is_occupied_intersects = region_intersects_rect (occupied_region, &device_space_actor_rect);
         if (is_occupied_intersects)
@@ -475,7 +486,7 @@ gboolean find_overlay_candidates (MetaCompositorView *compositor_view,
                                           (child_actor),
                                           max_scanout_count,
                                           max_overlay_count,
-                                          occupied_region, opaque_region,
+                                          occupied_region, opaque_region, effected_region,
                                           overlay_candidates, underlay_candidates))
               {
                 return FALSE;
@@ -706,6 +717,7 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
   GList* window_actors = meta_compositor_get_window_actors (compositor);
   MtkRegion* occupied_region = mtk_region_create();
   MtkRegion* opaque_region = mtk_region_create();
+  MtkRegion* effected_region = mtk_region_create();
   guint32 max_scanout_count;
   guint32 max_overlay_count;
   GList* overlay_candidates = NULL;
@@ -722,7 +734,7 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
                                      clutter_actor,
                                      max_scanout_count,
                                      max_overlay_count,
-                                     occupied_region, opaque_region,
+                                     occupied_region, opaque_region, effected_region,
                                      &overlay_candidates, &underlay_candidates))
         {
           // Fallback to Gfx compositing
