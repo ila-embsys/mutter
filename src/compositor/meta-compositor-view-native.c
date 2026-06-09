@@ -382,10 +382,17 @@ gboolean find_overlay_candidates (MetaCompositorView *compositor_view,
   if( META_IS_WINDOW_ACTOR (clutter_actor) )
   {
     window_actor = META_WINDOW_ACTOR (clutter_actor);
-    // surface_actor = meta_window_actor_get_surface (window_actor);
     surface_actor = meta_window_actor_get_scanout_candidate (window_actor);
-    surface_actor_wayland = META_SURFACE_ACTOR_WAYLAND (surface_actor);
-    surface = meta_surface_actor_wayland_get_surface (surface_actor_wayland);
+    if (surface_actor)
+      {
+        surface_actor_wayland = META_SURFACE_ACTOR_WAYLAND (surface_actor);
+        surface = meta_surface_actor_wayland_get_surface (surface_actor_wayland);
+      }
+    else
+      {
+        meta_topic (META_DEBUG_MOHAN, "[Debug] No Scanout Candidate For Window Actor");
+        return FALSE;      
+      }
   }
 
   gboolean has_surface_actor = surface_actor != NULL;

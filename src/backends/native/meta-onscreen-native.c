@@ -869,7 +869,7 @@ meta_onscreen_native_flip_crtc (CoglOnscreen           *onscreen,
                                 MetaKmsAssignPlaneFlag  flags,
                                 const MtkRegion        *region)
 {
-  meta_topic (META_DEBUG_MOHAN_KMS, "Native Flip CRTC called");
+  meta_topic (META_DEBUG_MOHAN, "[Rendering] Native Flip CRTC called");
 
   //meta_topic (META_DEBUG_MOHAN, "Sleeping for a While");
   //sleep (15);
@@ -885,10 +885,9 @@ meta_onscreen_native_flip_crtc (CoglOnscreen           *onscreen,
 #ifndef G_DISABLE_ASSERT
   MetaGpuKms *gpu_kms;
 #endif
-  MetaDrmBuffer *buffer;
+  MetaDrmBuffer *primary_buffer;
   GList *scanout_list;
   GList *iter;
-  CoglScanout *current_scanout;
   MetaKmsPlaneAssignment *plane_assignment;
   graphene_rect_t src_rect;
   MtkRectangle dst_rect;
@@ -908,12 +907,10 @@ meta_onscreen_native_flip_crtc (CoglOnscreen           *onscreen,
     {
     case META_RENDERER_NATIVE_MODE_GBM:
       frame_native = meta_frame_native_from_frame (frame);
-      buffer = meta_frame_native_get_buffer (frame_native);
+      primary_buffer = meta_frame_native_get_primary_buffer (frame_native);
       scanout_list = meta_frame_native_get_scanout (frame_native);
 
-      meta_topic (META_DEBUG_MOHAN_KMS, "Frame_Native:%p Scanout: %p Buffer: %p", frame_native, scanout_list, buffer);
-
-      if (!buffer && !scanout_list)
+      if (!primary_buffer && !scanout_list)
       {
         meta_topic (META_DEBUG_MOHAN_KMS, "No buffer associated with frame");
         return FALSE;
@@ -955,12 +952,13 @@ meta_onscreen_native_flip_crtc (CoglOnscreen           *onscreen,
       if (scanout_list)
         {
           meta_topic (META_DEBUG_KMS, "Assigning scanouts for planes");
+          meta_topic (META_DEBUG_MOHAN, "Assigning scanouts for planes");
           for(iter = scanout_list; iter; iter = iter->next)
             {
               CoglScanout *scanout = iter->data;
               MetaDrmBuffer *scanout_buffer = META_DRM_BUFFER (cogl_scanout_get_buffer (scanout));
               uint32_t plane_id;
-              
+
               plane_id = cogl_scanout_get_plane_id (scanout);
 
               cogl_scanout_get_src_rect (scanout, &src_rect);
@@ -977,24 +975,25 @@ meta_onscreen_native_flip_crtc (CoglOnscreen           *onscreen,
               g_assert (plane_assignment);
             }
         }
-      else
+      if (primary_buffer)
         {
           meta_topic (META_DEBUG_KMS, "Assigning primary plane");
+          meta_topic (META_DEBUG_MOHAN, "Assigning Primary Plane");
           src_rect = (graphene_rect_t) {
             .origin.x = 0,
             .origin.y = 0,
-            .size.width = meta_drm_buffer_get_width (buffer),
-            .size.height = meta_drm_buffer_get_height (buffer)
+            .size.width = meta_drm_buffer_get_width (primary_buffer),
+            .size.height = meta_drm_buffer_get_height (primary_buffer)
           };
           dst_rect = (MtkRectangle) {
             .x = 0,
             .y = 0,
-            .width = meta_drm_buffer_get_width (buffer),
-            .height = meta_drm_buffer_get_height (buffer)
+            .width = meta_drm_buffer_get_width (primary_buffer),
+            .height = meta_drm_buffer_get_height (primary_buffer)
           };
 
           plane_assignment = assign_primary_plane (crtc_kms,
-                                                   buffer,
+                                                   primary_buffer,
                                                    kms_update,
                                                    flags,
                                                    &src_rect,
@@ -2088,7 +2087,6 @@ maybe_post_next_frame (CoglOnscreen *onscreen)
   MetaFrameNative *frame_native;
   MtkRegion *region;
   int sync_fd;
-  const MetaKmsResultListenerVtable *listener;
   MetaKmsAssignPlaneFlag flip_flags;
   gboolean is_direct_scanout;
   gboolean is_swap_buffers;
@@ -2124,22 +2122,10 @@ maybe_post_next_frame (CoglOnscreen *onscreen)
   is_direct_scanout = meta_frame_native_get_scanout (frame_native) != NULL;
   is_swap_buffers = region != NULL;
 
-  if (is_direct_scanout)
-    {
-      meta_topic (META_DEBUG_MOHAN_KMS, "Attempting to Direct Scanout");
-      listener = &scanout_result_listener_vtable;
-      flip_flags = META_KMS_ASSIGN_PLANE_FLAG_DISABLE_IMPLICIT_SYNC;
-
-      /*if(!swap_buffer_impl (onscreen, renderer_gpu_data, frame_native, region))
-        {
-          meta_topic (META_DEBUG_MOHAN_KMS," Failed to swap buffers");
-          goto post_failed;
-        }*/
-    }
-  else if (is_swap_buffers)
+  if (is_swap_buffers)
     {
 #if 1
-      meta_topic (META_DEBUG_MOHAN_KMS, "Attempting to Swap Buffers");
+      meta_topic (META_DEBUG_MOHAN, "[Rendering] Attempting to Swap Buffers");
       g_autoptr (MetaDrmBuffer) primary_gpu_fb = NULL;
       g_autoptr (MetaDrmBuffer) secondary_gpu_fb = NULL;
       g_autoptr (MetaDrmBuffer) buffer = NULL;
@@ -2149,9 +2135,6 @@ maybe_post_next_frame (CoglOnscreen *onscreen)
       MetaOnscreenNativeSecondaryGpuState *secondary_gpu_state;
       MetaDeviceFile *render_device_file =
         meta_render_device_get_device_file (renderer_gpu_data->render_device);
-
-      listener = &swap_buffer_result_listener_vtable;
-      flip_flags = META_KMS_ASSIGN_PLANE_FLAG_NONE;
 
       secondary_gpu_state = onscreen_native->secondary_gpu_state;
       if (secondary_gpu_state)
@@ -2181,6 +2164,7 @@ maybe_post_next_frame (CoglOnscreen *onscreen)
                                                 &error);
           if (!buffer_gbm)
             {
+              meta_topic (META_DEBUG_MOHAN, "[Rendering] Failed to lock front Buffer");
               g_warning ("Failed to lock front buffer on %s: %s",
                          meta_device_file_get_path (render_device_file),
                          error->message);
@@ -2196,6 +2180,7 @@ maybe_post_next_frame (CoglOnscreen *onscreen)
                                          &error);
           if (buffer == NULL)
             {
+              meta_topic (META_DEBUG_MOHAN, "[Rendering] Failed to acquire front Buffer");
               g_warning ("Failed to acquire front buffer: %s", error->message);
               goto post_failed;
             }
@@ -2227,11 +2212,6 @@ maybe_post_next_frame (CoglOnscreen *onscreen)
         }
 #endif
     }
-  else /* property-only update, no framebuffer changes */
-    {
-      listener = &swap_buffer_result_listener_vtable;
-      flip_flags = META_KMS_ASSIGN_PLANE_FLAG_NONE;
-    }
 
   power_save_mode = meta_monitor_manager_get_power_save_mode (monitor_manager);
   if (power_save_mode != META_POWER_SAVE_ON)
@@ -2246,12 +2226,28 @@ maybe_post_next_frame (CoglOnscreen *onscreen)
   kms_device = meta_kms_crtc_get_device (kms_crtc);
   kms_update = meta_frame_native_ensure_kms_update (frame_native,
                                                     kms_device);
-
-  meta_kms_update_add_result_listener (kms_update,
-                                       listener,
-                                       NULL,
-                                       onscreen_native,
-                                       NULL);
+  
+  if (is_direct_scanout)
+    {
+      meta_kms_update_add_result_listener (kms_update,
+                                           &scanout_result_listener_vtable,
+                                           NULL,
+                                           onscreen_native,
+                                           NULL);
+    }
+  if (is_swap_buffers || !is_direct_scanout)
+    {
+      meta_kms_update_add_result_listener (kms_update,
+                                           &swap_buffer_result_listener_vtable,
+                                           NULL,
+                                           onscreen_native,
+                                           NULL);
+    }
+  
+  if (is_direct_scanout)
+    flip_flags = META_KMS_ASSIGN_PLANE_FLAG_DISABLE_IMPLICIT_SYNC;
+  else
+    flip_flags = META_KMS_ASSIGN_PLANE_FLAG_NONE;
 
   ensure_crtc_modes (onscreen, kms_update);
   if (!meta_onscreen_native_flip_crtc (onscreen,
@@ -2625,6 +2621,94 @@ meta_onscreen_native_direct_scanout (CoglOnscreen   *onscreen,
   clutter_frame_set_result (frame, CLUTTER_FRAME_RESULT_PENDING_PRESENTED);
   meta_topic (META_DEBUG_MOHAN, "meta_onscreen_native_direct_scanout succeeded");
   maybe_post_next_frame (onscreen);
+  return TRUE;
+}
+
+static gboolean
+meta_onscreen_native_compose_with_hw_planes (CoglOnscreen    *onscreen,
+                                             const MtkRegion *region,
+                                             GList           *scanout_list,
+                                             CoglFrameInfo   *info,
+                                             gboolean         use_swap_region,
+                                             gboolean         use_swap_damage,
+                                             gpointer         user_data,
+                                             GError          **error)
+{
+  meta_topic (META_DEBUG_MOHAN, "[Rendering] In Onscreen Native Compose");
+  CoglFramebuffer *framebuffer = COGL_FRAMEBUFFER (onscreen);
+  MetaOnscreenNative *onscreen_native = META_ONSCREEN_NATIVE (onscreen);
+  CoglContext *cogl_context = cogl_framebuffer_get_context (framebuffer);
+  CoglRenderer *cogl_renderer = cogl_context->display->renderer;
+  CoglRendererEGL *cogl_renderer_egl = cogl_renderer_get_winsys_data (cogl_renderer);
+  MetaRendererNativeGpuData *renderer_gpu_data = cogl_renderer_egl->platform;
+  MetaOnscreenNativeSecondaryGpuState *secondary_gpu_state;
+  ClutterFrame *frame = user_data;
+  MetaFrameNative *frame_native = meta_frame_native_from_frame (frame);
+  CoglOnscreenClass *parent_class;
+  gboolean refresh_primary_plane = use_swap_region || use_swap_damage;
+  g_autoptr (MetaDrmBuffer) secondary_gpu_fb = NULL;
+  g_autofd int sync_fd = -1;
+
+  g_warn_if_fail (renderer_gpu_data->mode == META_RENDERER_NATIVE_MODE_GBM);
+  
+  assign_next_frame (onscreen_native, frame);
+  
+  if (refresh_primary_plane)
+    {
+      COGL_TRACE_BEGIN_SCOPED (MetaRendererNativeSwapBuffers,
+                           "Meta::OnscreenNative::swap_buffers_with_damage()");
+      secondary_gpu_fb =
+        update_secondary_gpu_state_pre_swap_buffers (onscreen, region);
+
+      secondary_gpu_state = onscreen_native->secondary_gpu_state;
+      if (secondary_gpu_state)
+        {
+          g_clear_object (&secondary_gpu_state->source_framebuffer);
+          secondary_gpu_state->source_framebuffer =
+            g_steal_pointer (&secondary_gpu_fb);
+        }
+
+      parent_class = COGL_ONSCREEN_CLASS (meta_onscreen_native_parent_class);
+
+      if (use_swap_region)
+        {
+          meta_topic (META_DEBUG_MOHAN, "[Rendering] Swapping Region");
+          parent_class->swap_region (onscreen,
+                                     region,
+                                     info,
+                                     user_data);
+        }
+      else if (use_swap_damage)
+        {
+          meta_topic (META_DEBUG_MOHAN, "[Rendering] Swapping Damage");
+          parent_class->swap_buffers_with_damage (onscreen,
+                                                  region,
+                                                  info,
+                                                  user_data);
+        }
+      
+      meta_frame_native_set_damage (frame_native, region);
+    }
+
+  meta_frame_native_set_scanout (frame_native, scanout_list);
+
+  sync_fd = cogl_context_get_latest_sync_fd (cogl_context);
+
+  clutter_frame_set_result (frame,
+                            CLUTTER_FRAME_RESULT_PENDING_PRESENTED);
+
+  if (refresh_primary_plane && sync_fd >= 0)
+    {
+      meta_frame_native_set_sync_fd (frame_native, g_steal_fd (&sync_fd));
+      if (onscreen_native->render_source)
+        render_source_add_frame (onscreen_native->render_source, frame);
+      else
+        maybe_post_next_frame (onscreen);
+    }
+  else
+    {
+      maybe_post_next_frame (onscreen);
+    }
   return TRUE;
 }
 
@@ -3987,6 +4071,7 @@ meta_onscreen_native_class_init (MetaOnscreenNativeClass *klass)
   onscreen_class->swap_buffers_with_damage =
     meta_onscreen_native_swap_buffers_with_damage;
   onscreen_class->direct_scanout = meta_onscreen_native_direct_scanout;
+  onscreen_class->compose_with_hw_plane = meta_onscreen_native_compose_with_hw_planes;
   onscreen_class->get_window_handles = meta_onscreen_native_get_window_handles;
 }
 

@@ -130,6 +130,12 @@ meta_frame_native_get_buffer (MetaFrameNative *frame_native)
 #endif
 }
 
+MetaDrmBuffer *
+meta_frame_native_get_primary_buffer (MetaFrameNative *frame_native)
+{
+  return frame_native->buffer;
+}
+
 void
 meta_frame_native_set_scanout (MetaFrameNative *frame_native,
                                GList     *scanout_list)

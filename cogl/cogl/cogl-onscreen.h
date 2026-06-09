@@ -78,6 +78,15 @@ struct _CoglOnscreenClass
                                gpointer        user_data,
                                GError        **error);
 
+  gboolean (* compose_with_hw_plane) (CoglOnscreen    *onscreen,
+                                      const MtkRegion *region,
+                                      GList           *scanout_list,
+                                      CoglFrameInfo   *info,
+                                      gboolean         use_swap_region,
+                                      gboolean         use_swap_damage,
+                                      gpointer         user_data,
+                                      GError          **error);
+
   int (* get_buffer_age) (CoglOnscreen *onscreen);
 
   gboolean (* get_window_handles) (CoglOnscreen *onscreen,
@@ -256,6 +265,15 @@ cogl_onscreen_swap_region (CoglOnscreen    *onscreen,
                            CoglFrameInfo   *info,
                            gpointer         user_data);
 
+COGL_EXPORT gboolean
+cogl_onscreen_compose_with_hw_plane (CoglOnscreen   *onscreen,
+                                     const MtkRegion *region,
+                                     GList           *scanout_list,
+                                     CoglFrameInfo   *info,
+                                     gboolean         use_swap_region,
+                                     gboolean         use_swap_damage,
+                                     gpointer         user_data,
+                                     GError         **error);
 /**
  * CoglFrameEvent:
  * @COGL_FRAME_EVENT_SYNC: Notifies that the system compositor has
