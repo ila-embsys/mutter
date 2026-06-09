@@ -354,6 +354,81 @@ cogl_onscreen_swap_region (CoglOnscreen    *onscreen,
   priv->frame_counter++;
 }
 
+gboolean
+cogl_onscreen_compose_with_hw_plane (CoglOnscreen   *onscreen,
+                                     const MtkRegion *region,
+                                     GList           *scanout_list,
+                                     CoglFrameInfo   *info,
+                                     gboolean         use_swap_region,
+                                     gboolean         use_swap_damage,
+                                     gpointer         user_data,
+                                     GError         **error)
+{
+  CoglOnscreenPrivate *priv = cogl_onscreen_get_instance_private (onscreen);
+  CoglFramebuffer *framebuffer = COGL_FRAMEBUFFER (onscreen);
+  CoglContext *context = cogl_framebuffer_get_context (framebuffer);
+  CoglOnscreenClass *klass = COGL_ONSCREEN_GET_CLASS (onscreen);
+
+  if (!COGL_IS_ONSCREEN (framebuffer))
+    return FALSE;
+
+  g_warn_if_fail (cogl_context_has_winsys_feature (context, COGL_WINSYS_FEATURE_SYNC_AND_COMPLETE_EVENT));
+
+  info->frame_counter = priv->frame_counter;
+  g_queue_push_tail (&priv->pending_frame_infos, info);
+
+  if ( use_swap_damage || use_swap_region )
+    {
+      _cogl_framebuffer_flush_journal (framebuffer);
+      cogl_framebuffer_discard_buffers (framebuffer,
+                                        COGL_BUFFER_BIT_DEPTH |
+                                        COGL_BUFFER_BIT_STENCIL);
+    }
+  
+  if (use_swap_region)
+    {
+      if(!klass->swap_region)
+        return FALSE;
+    }
+  
+  if (!klass->compose_with_hw_plane (onscreen,
+                                     region,
+                                     scanout_list,
+                                     info,
+                                     use_swap_region,
+                                     use_swap_damage,
+                                     user_data,
+                                     error))
+    {
+      g_queue_pop_tail (&priv->pending_frame_infos);
+      return FALSE;
+    }
+
+  if (scanout_list)
+    info->flags |= COGL_FRAME_INFO_FLAG_ZERO_COPY;
+  
+  if ( use_swap_damage || use_swap_region )
+    {
+      if (G_UNLIKELY (COGL_DEBUG_ENABLED (COGL_DEBUG_SYNC_FRAME)))
+        cogl_framebuffer_finish (framebuffer);
+
+      if (!cogl_context_has_winsys_feature (context, COGL_WINSYS_FEATURE_SYNC_AND_COMPLETE_EVENT))
+        {
+          g_autoptr (CoglFrameInfo) pending_info = NULL;
+
+          g_warn_if_fail (priv->pending_frame_infos.length == 1);
+
+          pending_info = g_queue_pop_tail (&priv->pending_frame_infos);
+
+          _cogl_onscreen_queue_event (onscreen, COGL_FRAME_EVENT_SYNC, pending_info);
+          _cogl_onscreen_queue_event (onscreen, COGL_FRAME_EVENT_COMPLETE, pending_info);
+        }
+    }
+
+  priv->frame_counter++;
+  return TRUE;
+}
+
 int
 cogl_onscreen_get_buffer_age (CoglOnscreen *onscreen)
 {
