@@ -869,8 +869,6 @@ meta_onscreen_native_flip_crtc (CoglOnscreen           *onscreen,
                                 MetaKmsAssignPlaneFlag  flags,
                                 const MtkRegion        *region)
 {
-  meta_topic (META_DEBUG_MOHAN, "[Rendering] Native Flip CRTC called");
-
   //meta_topic (META_DEBUG_MOHAN, "Sleeping for a While");
   //sleep (15);
   //meta_topic (META_DEBUG_MOHAN, "Done Sleeping");
@@ -952,7 +950,7 @@ meta_onscreen_native_flip_crtc (CoglOnscreen           *onscreen,
       if (scanout_list)
         {
           meta_topic (META_DEBUG_KMS, "Assigning scanouts for planes");
-          meta_topic (META_DEBUG_MOHAN, "Assigning scanouts for planes");
+          meta_topic (META_DEBUG_MOHAN, "[KMS] Assigning scanouts for planes");
           for(iter = scanout_list; iter; iter = iter->next)
             {
               CoglScanout *scanout = iter->data;
@@ -978,7 +976,7 @@ meta_onscreen_native_flip_crtc (CoglOnscreen           *onscreen,
       if (primary_buffer)
         {
           meta_topic (META_DEBUG_KMS, "Assigning primary plane");
-          meta_topic (META_DEBUG_MOHAN, "Assigning Primary Plane");
+          meta_topic (META_DEBUG_MOHAN, "[KMS] Assigning Primary Plane");
           src_rect = (graphene_rect_t) {
             .origin.x = 0,
             .origin.y = 0,
@@ -2125,7 +2123,6 @@ maybe_post_next_frame (CoglOnscreen *onscreen)
   if (is_swap_buffers)
     {
 #if 1
-      meta_topic (META_DEBUG_MOHAN, "[Rendering] Attempting to Swap Buffers");
       g_autoptr (MetaDrmBuffer) primary_gpu_fb = NULL;
       g_autoptr (MetaDrmBuffer) secondary_gpu_fb = NULL;
       g_autoptr (MetaDrmBuffer) buffer = NULL;
@@ -2634,7 +2631,6 @@ meta_onscreen_native_compose_with_hw_planes (CoglOnscreen    *onscreen,
                                              gpointer         user_data,
                                              GError          **error)
 {
-  meta_topic (META_DEBUG_MOHAN, "[Rendering] In Onscreen Native Compose");
   CoglFramebuffer *framebuffer = COGL_FRAMEBUFFER (onscreen);
   MetaOnscreenNative *onscreen_native = META_ONSCREEN_NATIVE (onscreen);
   CoglContext *cogl_context = cogl_framebuffer_get_context (framebuffer);

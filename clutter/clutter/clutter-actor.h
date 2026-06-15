@@ -851,6 +851,12 @@ void                            clutter_actor_inhibit_culling                   
 CLUTTER_EXPORT
 void                            clutter_actor_uninhibit_culling                 (ClutterActor               *actor);
 
+CLUTTER_EXPORT
+void                            clutter_actor_set_skip_paint                    (ClutterActor               *actor,
+                                                                                 gboolean                    skip_paint);
+CLUTTER_EXPORT
+gboolean                        clutter_actor_get_skip_paint                    (ClutterActor               *actor);
+
 /**
  * ClutterActorCreateChildFunc:
  * @item: (type GObject): the item in the model

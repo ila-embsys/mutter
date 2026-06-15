@@ -904,6 +904,39 @@ void RefreshPlaneAssignation (MetaCompositorView  *compositor_view)
     }
 }
 
+/*
+static void
+skip_candidate_paint (GList* candidates)
+{
+  GList* iter = NULL;
+  guint num_candidates = g_list_length (candidates);
+
+  for(iter = g_list_last (candidates); iter != NULL; iter = iter->prev)
+    {
+      MetaSurfaceActor* surface_actor = iter->data;
+      MetaWaylandSurface* surface = meta_surface_actor_wayland_get_surface (META_SURFACE_ACTOR_WAYLAND (surface_actor));
+      MetaWindow *window = meta_wayland_surface_get_window (surface);
+      MetaWindowActor *window_actor = meta_window_actor_from_window (window);
+      ClutterActor *clutter_actor = CLUTTER_ACTOR (window_actor);
+
+      if (num_candidates > 1 && num_candidates < 3)
+        {
+          if (!clutter_actor_get_skip_paint (clutter_actor))
+            {
+              meta_surface_actor_set_opaque_region (surface_actor, NULL);
+              clutter_actor_queue_redraw (clutter_actor);
+              clutter_actor_set_skip_paint (clutter_actor, TRUE);
+            }
+        }
+      else
+        {
+          clutter_actor_set_skip_paint (clutter_actor, FALSE);
+        }
+      break;
+    }
+}
+*/
+
 void
 meta_compositor_view_native_maybe_assign_scanout (MetaCompositorViewNative *view_native,
                                                   MetaCompositor           *compositor)
@@ -919,10 +952,19 @@ meta_compositor_view_native_maybe_assign_scanout (MetaCompositorViewNative *view
                                             &crtc,
                                             &onscreen,
                                             &overlay_candidates);
-  
+
   if (candidate_found)
     {
       GList* scanout_candidates = NULL;
+
+      /*
+      if (meta_get_debug_paint_flags () & META_DEBUG_PAINT_DISABLE_DIRECT_SCANOUT)
+      {
+        if (g_list_length (overlay_candidates) > 1)
+          skip_candidate_paint (overlay_candidates);
+        return;
+      }
+      */
 
       RefreshPlaneAssignation (compositor_view);
       acquire_scanout_for_candidates (compositor_view, onscreen, overlay_candidates, &scanout_candidates);

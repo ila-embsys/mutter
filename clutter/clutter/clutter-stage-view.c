@@ -90,6 +90,8 @@ typedef struct _ClutterStageViewPrivate
   MtkRegion *redraw_clip;
   gboolean has_accumulated_redraw_clip;
   MtkRegion *accumulated_redraw_clip;
+  gboolean has_scanout_clip;
+  MtkRegion *scanout_clip;
 
   float refresh_rate;
   int64_t vblank_duration_us;
@@ -849,6 +851,57 @@ clutter_stage_view_accumulate_redraw_clip (ClutterStageView *view)
   priv->has_redraw_clip = FALSE;
 }
 
+void
+clutter_stage_view_add_scanout_clip (ClutterStageView   *view,
+                                     const MtkRectangle *clip)
+{
+  ClutterStageViewPrivate *priv =
+    clutter_stage_view_get_instance_private (view);
+
+  if (clip->width == 0 || clip->height == 0)
+    return;
+
+  if (!priv->scanout_clip)
+    {
+      priv->scanout_clip = mtk_region_create_rectangle (clip);
+    }
+  else
+    {
+      mtk_region_union_rectangle (priv->scanout_clip, clip);
+    }
+
+  priv->has_scanout_clip = TRUE;
+}
+
+const MtkRegion *
+clutter_stage_view_peek_scanout_clip (ClutterStageView *view)
+{
+  ClutterStageViewPrivate *priv =
+    clutter_stage_view_get_instance_private (view);
+
+  return priv->scanout_clip;
+}
+
+gboolean
+clutter_stage_view_has_scanout_clip (ClutterStageView *view)
+{
+  ClutterStageViewPrivate *priv =
+    clutter_stage_view_get_instance_private (view);
+  
+  return priv->has_scanout_clip;
+}
+
+void clutter_stage_view_accumulate_scanout_clip (ClutterStageView *view)
+{
+  ClutterStageViewPrivate *priv =
+    clutter_stage_view_get_instance_private (view);
+
+  g_return_if_fail(priv->has_scanout_clip);
+
+  g_clear_pointer (&priv->scanout_clip, mtk_region_unref);
+  priv->has_scanout_clip = FALSE;
+}
+
 #if 0
 void
 clutter_stage_view_assign_next_scanout (ClutterStageView *view,
@@ -1092,7 +1145,7 @@ handle_frame_clock_frame (ClutterFrameClock *frame_clock,
   _clutter_stage_window_prepare_frame (stage_window, view, frame);
   clutter_stage_emit_prepare_frame (stage, view, frame);
 
-  if (clutter_stage_view_has_redraw_clip (view))
+  if (clutter_stage_view_has_redraw_clip (view) || clutter_stage_view_has_scanout_clip (view))
     {
       clutter_stage_emit_before_paint (stage, view, frame);
 

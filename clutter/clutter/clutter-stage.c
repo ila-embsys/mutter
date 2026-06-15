@@ -210,7 +210,8 @@ clutter_stage_get_preferred_height (ClutterActor *self,
 
 static void
 clutter_stage_add_redraw_clip (ClutterStage *stage,
-                               MtkRectangle *clip)
+                               MtkRectangle *clip,
+                               gboolean      track_for_scanout)
 {
   GList *l;
 
@@ -230,7 +231,12 @@ clutter_stage_add_redraw_clip (ClutterStage *stage,
           clutter_stage_view_get_layout (view, &view_layout);
           if (mtk_rectangle_intersect (&view_layout, clip,
                                        &intersection))
-            clutter_stage_view_add_redraw_clip (view, &intersection);
+            {
+              if (track_for_scanout)
+                clutter_stage_view_add_scanout_clip (view, &intersection);
+              else
+                clutter_stage_view_add_redraw_clip (view, &intersection);
+            }
         }
     }
 }
@@ -253,7 +259,7 @@ queue_full_redraw (ClutterStage *stage)
   if (stage_window == NULL)
     return;
 
-  clutter_stage_add_redraw_clip (stage, NULL);
+  clutter_stage_add_redraw_clip (stage, NULL, false);
 }
 
 static void
@@ -2472,7 +2478,8 @@ clutter_stage_schedule_update (ClutterStage *stage)
 
 void
 clutter_stage_add_to_redraw_clip (ClutterStage       *stage,
-                                  ClutterPaintVolume *redraw_clip)
+                                  ClutterPaintVolume *redraw_clip,
+                                  gboolean            track_for_scanout)
 {
   ClutterStageWindow *stage_window;
   ClutterActorBox bounding_box;
@@ -2491,7 +2498,7 @@ clutter_stage_add_to_redraw_clip (ClutterStage       *stage,
 
   if (redraw_clip == NULL)
     {
-      clutter_stage_add_redraw_clip (stage, NULL);
+      clutter_stage_add_redraw_clip (stage, NULL, false);
       return;
     }
 
@@ -2522,7 +2529,7 @@ clutter_stage_add_to_redraw_clip (ClutterStage       *stage,
   stage_clip.width = (int) (intersection_box.x2 - stage_clip.x);
   stage_clip.height = (int) (intersection_box.y2 - stage_clip.y);
 
-  clutter_stage_add_redraw_clip (stage, &stage_clip);
+  clutter_stage_add_redraw_clip (stage, &stage_clip, track_for_scanout);
 }
 
 int64_t

@@ -52,6 +52,7 @@
 #include "common/meta-cogl-drm-formats.h"
 #include "common/meta-drm-format-helpers.h"
 #include "compositor/meta-multi-texture-format-private.h"
+#include "compositor/meta-window-actor-private.h"
 #include "meta/meta-backend.h"
 #include "wayland/meta-wayland-buffer.h"
 #include "wayland/meta-wayland-private.h"
@@ -1635,11 +1636,23 @@ update_surface_feedback_tranches (MetaWaylandDmaBufSurfaceFeedback *surface_feed
 #ifdef HAVE_NATIVE_BACKEND
   MetaCrtc *crtc;
 
+  MetaWaylandSurface *surface = surface_feedback->surface;
+  MetaSurfaceActor *surface_actor = meta_wayland_surface_get_actor (surface);
+  ClutterActor *clutter_actor = CLUTTER_ACTOR(surface_actor);
+
   crtc = meta_wayland_surface_get_scanout_candidate (surface_feedback->surface);
   if (crtc)
-    ensure_scanout_tranche (surface_feedback, crtc);
+    {
+      ensure_scanout_tranche (surface_feedback, crtc);
+      meta_surface_actor_set_opaque_region (surface_actor, NULL);
+      clutter_actor_queue_redraw (clutter_actor);
+      clutter_actor_set_skip_paint (clutter_actor, TRUE);
+    }
   else
-    clear_scanout_tranche (surface_feedback);
+    {
+      clear_scanout_tranche (surface_feedback);
+      clutter_actor_set_skip_paint (clutter_actor, FALSE);
+    }
 #endif /* HAVE_NATIVE_BACKEND */
 }
 
