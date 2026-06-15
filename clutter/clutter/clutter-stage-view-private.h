@@ -65,6 +65,19 @@ CLUTTER_EXPORT
 void clutter_stage_view_accumulate_redraw_clip (ClutterStageView *view);
 
 CLUTTER_EXPORT
+void clutter_stage_view_add_scanout_clip (ClutterStageView   *view,
+                                          const MtkRectangle *clip);
+
+CLUTTER_EXPORT
+const MtkRegion * clutter_stage_view_peek_scanout_clip (ClutterStageView *view);
+
+CLUTTER_EXPORT
+gboolean    clutter_stage_view_has_scanout_clip (ClutterStageView *view);
+
+CLUTTER_EXPORT
+void clutter_stage_view_accumulate_scanout_clip (ClutterStageView *view);
+
+CLUTTER_EXPORT
 GList * clutter_stage_view_take_scanout (ClutterStageView *view);
 
 CLUTTER_EXPORT

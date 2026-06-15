@@ -1091,7 +1091,6 @@ meta_stage_impl_view (MetaStageImpl    *stage_impl,
     frame_info = cogl_frame_info_new (cogl_context, priv->global_frame_counter,
                                       frame->frame_count);
     g_autoptr (GError) error = NULL;
-    meta_topic (META_DEBUG_MOHAN, "[Rendering] Calling Onscreen Compose");
     onscreen_result = cogl_onscreen_compose_with_hw_plane (onscreen,
                                                            swap_region,
                                                            enable_scanout ? scanout_list : NULL,
@@ -1106,8 +1105,8 @@ meta_stage_impl_view (MetaStageImpl    *stage_impl,
      {
         priv->global_frame_counter++;
 
-        if (enable_scanout && !enable_primary_refresh)
-          clutter_stage_view_accumulate_redraw_clip (stage_view);  
+        if (enable_scanout)
+          clutter_stage_view_accumulate_scanout_clip (stage_view);
      }
     else
      {
@@ -1157,14 +1156,17 @@ probe_region (ClutterStageView *stage_view, GList *scanout_list)
 
   calc_scanout_region (scanout_list, &scanout_region);
   const MtkRegion *redraw_clip = clutter_stage_view_peek_redraw_clip (stage_view);
+  const MtkRegion *scanout_clip = clutter_stage_view_peek_scanout_clip (stage_view);
 
   int num_scanout_rects = mtk_region_num_rectangles (scanout_region);
   int num_redraw_rects = mtk_region_num_rectangles (redraw_clip);
+  int num_scanout_clip = mtk_region_num_rectangles (scanout_clip);
   int iter;
 
   meta_topic (META_DEBUG_MOHAN, "***** Probe Scanout & Redraw Region Starts *****");
   meta_topic (META_DEBUG_MOHAN, "scanout candidates: %d", g_list_length(scanout_list));
   meta_topic (META_DEBUG_MOHAN, "scanout_region: rects: %d", num_scanout_rects);
+  meta_topic (META_DEBUG_MOHAN, "scanout_clip: rects: %d", num_scanout_clip);
 
   for(iter = 0; iter < num_scanout_rects; iter++)
   {
@@ -1172,11 +1174,18 @@ probe_region (ClutterStageView *stage_view, GList *scanout_list)
     meta_topic (META_DEBUG_MOHAN, "scanout_rect: %d,%d %dx%d", rect.x, rect.y, rect.width, rect.height);
   }
 
-  meta_topic (META_DEBUG_MOHAN, "redraw_clip region: rects: %d", num_redraw_rects);
+  meta_topic (META_DEBUG_MOHAN, "redraw_clip region: rects: %d has_redraw_clip: %d", num_redraw_rects, clutter_stage_view_has_redraw_clip (stage_view));
   for(iter = 0; iter < num_redraw_rects; iter++)
   {
     MtkRectangle rect = mtk_region_get_rectangle (redraw_clip, iter);
     meta_topic (META_DEBUG_MOHAN, "redraw_rect: %d,%d %dx%d", rect.x, rect.y, rect.width, rect.height);
+  }
+
+  meta_topic (META_DEBUG_MOHAN, "scanout_clip: rects: %d has_scanout_clip: %d", num_scanout_clip, clutter_stage_view_has_scanout_clip (stage_view));
+  for(iter = 0; iter < num_scanout_clip; iter++)
+  {
+    MtkRectangle rect = mtk_region_get_rectangle (scanout_clip, iter);
+    meta_topic (META_DEBUG_MOHAN, "scanout_rect: %d,%d %dx%d", rect.x, rect.y, rect.width, rect.height);
   }
 
   meta_topic (META_DEBUG_MOHAN, "***** Probe Scanout & Redraw Region Ends *****");
@@ -1207,179 +1216,22 @@ meta_stage_impl_redraw_view (ClutterStageWindow *stage_window,
   GList *scanout_list = NULL;
 
   scanout_list = clutter_stage_view_take_scanout (stage_view);
-#if 0
-  if( scanout_list )
-    {
-      const MtkRegion *redraw_clip;
-      MtkRectangle redraw_clip_rect;
-      MtkRegion *scanout_region;
-      MtkRectangle scanout_rect;
-      calc_scanout_region (scanout_list, &scanout_region);
-      probe_region (stage_view, scanout_list);
-
-      if (scanout_region)
-        scanout_rect = mtk_region_get_extents (scanout_region);
-
-      meta_topic (META_DEBUG_MOHAN,
-                  "Scanout Request: scanout_rect=(%d,%d,%dx%d)",
-                  scanout_rect.x, scanout_rect.y,
-                  scanout_rect.width, scanout_rect.height);
-
-      redraw_clip = clutter_stage_view_peek_redraw_clip (stage_view);
-      if (redraw_clip)
-        redraw_clip_rect = mtk_region_get_extents (redraw_clip);
-      else
-        clutter_stage_view_get_layout (stage_view, &redraw_clip_rect);
-
-      /*
-      MtkRegionOverlap region_overlap = mtk_region_contains_rectangle (scanout_region, &redraw_clip_rect);
-
-      if (region_overlap != MTK_REGION_OVERLAP_OUT)
-      */
-      if ( go_for_scanout (scanout_region, &redraw_clip_rect) )
-        {
-          g_autoptr (GError) error = NULL;
-          meta_topic (META_DEBUG_MOHAN, "[Rendering] Going for Scanout");
-          if (meta_stage_impl_scanout_view (stage_impl,
-                                            stage_view,
-                                            scanout_list,
-                                            frame,
-                                            &error))
-          {
-            clutter_stage_view_accumulate_redraw_clip (stage_view);
-            return;
-          }
-
-          if (g_error_matches (error,
-                               COGL_SCANOUT_ERROR,
-                               COGL_SCANOUT_ERROR_INHIBITED))
-            {
-              meta_topic (META_DEBUG_RENDER,
-                          "Skipping scanout: inhibited");
-            }
-          else
-            {
-              g_warning ("Failed to scan out client buffer: %s", error->message);
-            }
-        }
-      else
-        {
-          meta_topic (META_DEBUG_MOHAN,
-                      "Skipping scanout: redraw clip (%d,%d,%d,%d) exceeds "
-                      "scanout area (%d,%d,%d,%d)",
-                      redraw_clip_rect.x, redraw_clip_rect.y,
-                      redraw_clip_rect.width, redraw_clip_rect.height,
-                      scanout_rect.x, scanout_rect.y,
-                      scanout_rect.width, scanout_rect.height);
-        }
-    }
-  else
-    {
-      meta_topic (META_DEBUG_RENDER,
-                      "Skipping scanout: no scanout candidates");
-    }
-#elif 0
-  if( scanout_list )
-    {
-      const MtkRegion *redraw_clip;
-      MtkRectangle redraw_clip_rect;
-      MtkRegion *scanout_region;
-      MtkRectangle scanout_rect;
-      calc_scanout_region (scanout_list, &scanout_region);
-      probe_region (stage_view, scanout_list);
-
-      if (scanout_region)
-        scanout_rect = mtk_region_get_extents (scanout_region);
-
-      meta_topic (META_DEBUG_MOHAN,
-                  "Scanout Request: scanout_rect=(%d,%d,%dx%d)",
-                  scanout_rect.x, scanout_rect.y,
-                  scanout_rect.width, scanout_rect.height);
-
-      redraw_clip = clutter_stage_view_peek_redraw_clip (stage_view);
-      if (redraw_clip)
-        redraw_clip_rect = mtk_region_get_extents (redraw_clip);
-      else
-        clutter_stage_view_get_layout (stage_view, &redraw_clip_rect);
-      
-      /*
-      MtkRegionOverlap region_overlap = mtk_region_contains_rectangle (scanout_region, &redraw_clip_rect);
-
-      if (region_overlap != MTK_REGION_OVERLAP_OUT)
-      */
-      if ( scanout_list )
-        {
-          g_autoptr (GError) error = NULL;
-
-          meta_topic (META_DEBUG_MOHAN, "[Rendering] Going for Scanout");
-          if (meta_stage_impl_scanout_view (stage_impl,
-                                            stage_view,
-                                            scanout_list,
-                                            frame,
-                                            &error))
-          {
-            clutter_stage_view_accumulate_redraw_clip (stage_view);
-            return;
-          }
-
-          if (g_error_matches (error,
-                               COGL_SCANOUT_ERROR,
-                               COGL_SCANOUT_ERROR_INHIBITED))
-            {
-              meta_topic (META_DEBUG_RENDER,
-                          "Skipping scanout: inhibited");
-            }
-          else
-            {
-              g_warning ("Failed to scan out client buffer: %s", error->message);
-            }
-        }
-      else
-        {
-          meta_topic (META_DEBUG_MOHAN,
-                      "Skipping scanout: redraw clip (%d,%d,%d,%d) exceeds "
-                      "scanout area (%d,%d,%d,%d)",
-                      redraw_clip_rect.x, redraw_clip_rect.y,
-                      redraw_clip_rect.width, redraw_clip_rect.height,
-                      scanout_rect.x, scanout_rect.y,
-                      scanout_rect.width, scanout_rect.height);
-        }
-    }
-  else
-    {
-      meta_topic (META_DEBUG_RENDER,
-                      "Skipping scanout: no scanout candidates");
-    }
-#endif
 
   gboolean enable_primary_refresh = FALSE;
   gboolean enable_scanout = FALSE;
 
-  const MtkRegion *redraw_clip;
-  MtkRectangle redraw_clip_rect;
   MtkRegion *scanout_region;
 
+  probe_region (stage_view, scanout_list);
   if (scanout_list)
     {
-      calc_scanout_region (scanout_list, &scanout_region);
-      probe_region (stage_view, scanout_list);
-
-      redraw_clip = clutter_stage_view_peek_redraw_clip (stage_view);
-      if (redraw_clip)
-        {
-          redraw_clip_rect = mtk_region_get_extents (redraw_clip);
-          // enable_primary_refresh = go_for_scanout (scanout_region, &redraw_clip_rect);
-          enable_primary_refresh = mtk_region_contains_rectangle (scanout_region, &redraw_clip_rect) != MTK_REGION_OVERLAP_OUT;
-        }
       enable_scanout = true;
+      enable_primary_refresh = clutter_stage_view_has_redraw_clip (stage_view);
     }
   else
     {
       enable_primary_refresh = TRUE;
     }
-
-  meta_topic (META_DEBUG_MOHAN, "[Rendering] Redrawing With Compose");
-  // meta_stage_impl_redraw_view_primary (stage_impl, stage_view, frame);
   meta_stage_impl_view (stage_impl, stage_view, frame, scanout_list, enable_primary_refresh, enable_scanout);
 }
 
