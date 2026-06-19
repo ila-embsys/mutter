@@ -79,3 +79,5 @@ meta_wayland_dma_buf_try_acquire_scanout (MetaWaylandBuffer     *buffer,
 
 void meta_wayland_dma_buf_supported_planes (MetaWaylandBuffer *buffer,
                                             ClutterStageView  *stage_view);
+
+void meta_wayland_dma_buf_dump_info (MetaWaylandBuffer *buffer, char **format_str, char **modifier_str, char **vendor_str);
