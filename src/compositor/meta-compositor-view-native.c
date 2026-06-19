@@ -284,7 +284,9 @@ static gboolean surfaceHasDMABufAttribs (MetaWaylandSurface *surface)
   if (!buffer)
     return FALSE;
 
-  return buffer->type == META_WAYLAND_BUFFER_TYPE_DMA_BUF && buffer->dma_buf.dma_buf != NULL;
+  MetaWaylandDmaBufBuffer *dma_buf = meta_wayland_dma_buf_from_buffer (buffer);
+
+  return buffer->type == META_WAYLAND_BUFFER_TYPE_DMA_BUF && dma_buf != NULL;
 }
 
 static gboolean region_intersects_rect (MtkRegion *region, MtkRectangle *rect)
@@ -451,8 +453,13 @@ gboolean find_overlay_candidates (MetaCompositorView *compositor_view,
             *underlay_candidates = g_list_prepend (*underlay_candidates, surface_actor);
           }
         else {
+          char *format_str = NULL;
+          char *vendor_str = NULL;
+          char *modifier_str = NULL;
           meta_topic (META_DEBUG_MOHAN, "Adding Overlay Candidate (%#x): (%dx%d)", clutter_actor, (int) clutter_actor_box_get_width (&actor_bounding_box), (int) clutter_actor_box_get_height (&actor_bounding_box));
-          meta_wayland_dma_buf_supported_planes (meta_wayland_surface_get_buffer (surface), stage_view);
+          meta_wayland_dma_buf_dump_info (meta_wayland_surface_get_buffer (surface), &format_str, &modifier_str, &vendor_str);
+          meta_topic (META_DEBUG_MOHAN, "Candidate With DMA BUF: format: %s, vendor: %s, modifier: %s", format_str, vendor_str, modifier_str);
+          // meta_wayland_dma_buf_supported_planes (meta_wayland_surface_get_buffer (surface), stage_view);
           *overlay_candidates = g_list_prepend (*overlay_candidates, surface_actor);
         }
         // TODO Also Check Max Scanout & Underlay Count once underlay is considered
@@ -906,7 +913,7 @@ void RefreshPlaneAssignation (MetaCompositorView  *compositor_view)
 
 /*
 static void
-skip_candidate_paint (GList* candidates)
+skip_candidate_paint (ClutterStageView *view, GList* candidates)
 {
   GList* iter = NULL;
   guint num_candidates = g_list_length (candidates);
@@ -923,8 +930,17 @@ skip_candidate_paint (GList* candidates)
         {
           if (!clutter_actor_get_skip_paint (clutter_actor))
             {
+              MetaShapedTexture *shaped_texture = meta_surface_actor_get_texture (surface_actor);
+              MtkRectangle area = (MtkRectangle) {
+                .x = 0,
+                .y = 0,
+                .width = meta_shaped_texture_get_width (shaped_texture),
+                .height = meta_shaped_texture_get_height (shaped_texture)
+              };
+              meta_shaped_texture_update_area (shaped_texture, &area, &area);
               meta_surface_actor_set_opaque_region (surface_actor, NULL);
               clutter_actor_queue_redraw (clutter_actor);
+              //clutter_stage_view_add_redraw_clip (view, NULL);
               clutter_actor_set_skip_paint (clutter_actor, TRUE);
             }
         }
@@ -956,16 +972,14 @@ meta_compositor_view_native_maybe_assign_scanout (MetaCompositorViewNative *view
   if (candidate_found)
     {
       GList* scanout_candidates = NULL;
-
-      /*
+/*
       if (meta_get_debug_paint_flags () & META_DEBUG_PAINT_DISABLE_DIRECT_SCANOUT)
       {
         if (g_list_length (overlay_candidates) > 1)
-          skip_candidate_paint (overlay_candidates);
+          skip_candidate_paint (meta_compositor_view_get_stage_view(compositor_view), overlay_candidates);
         return;
       }
-      */
-
+*/
       RefreshPlaneAssignation (compositor_view);
       acquire_scanout_for_candidates (compositor_view, onscreen, overlay_candidates, &scanout_candidates);
       try_assign_scanout_candidates (compositor_view, onscreen, scanout_candidates);
