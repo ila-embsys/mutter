@@ -745,6 +745,13 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
   if (meta_get_debug_paint_flags () & META_DEBUG_PAINT_DISABLE_DIRECT_SCANOUT)
     return FALSE;
 
+  if (meta_compositor_is_unredirect_inhibited (compositor))
+    {
+      meta_topic (META_DEBUG_RENDER,
+                  "No direct scanout candidate: unredirect inhibited");
+      return FALSE;
+    }
+
   GList* window_actors = meta_compositor_get_window_actors (compositor);
   MtkRegion* occupied_region = mtk_region_create();
   MtkRegion* opaque_region = mtk_region_create();
