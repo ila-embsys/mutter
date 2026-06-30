@@ -415,6 +415,7 @@ gboolean find_overlay_candidates (MetaCompositorView *compositor_view,
 
   gboolean has_surface_actor = surface_actor != NULL;
   gboolean has_dmabuf_attribs = FALSE;
+  gboolean surface_frequent_updates = FALSE;
   gboolean is_fully_opaque = FALSE;
   guint8 actor_opacity = 0;
   MtkRegionOverlap opaque_region_overlap;
@@ -429,6 +430,13 @@ gboolean find_overlay_candidates (MetaCompositorView *compositor_view,
   if (has_surface_actor)
     {
       has_dmabuf_attribs = surfaceHasDMABufAttribs (surface);
+
+      gint64 frametime_us;
+      if (meta_surface_actor_get_frame_time_estimation (surface_actor, &frametime_us))
+        {
+          surface_frequent_updates = frametime_us < (G_TIME_SPAN_SECOND / 20);
+        }
+
       is_fully_opaque = meta_surface_actor_is_opaque (surface_actor);
 
       map_region_to_device_space (compositor_view,
@@ -442,10 +450,8 @@ gboolean find_overlay_candidates (MetaCompositorView *compositor_view,
 
     // TODO Check the window's children potential candidates for overlay planes
 
-    // TODO check whether surface updates frequently
-    // TODO check whether effected region is intersects with device rect
-
     if (has_surface_actor &&
+        surface_frequent_updates &&
         has_dmabuf_attribs &&
         is_fully_opaque &&
         notCoveredByOpaque &&
