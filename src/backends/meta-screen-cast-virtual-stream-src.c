@@ -432,7 +432,7 @@ meta_screen_cast_virtual_stream_src_record_to_buffer (MetaScreenCastStreamSrc   
   scale = clutter_stage_view_get_scale (view);
   clutter_stage_view_get_layout (view, &view_rect);
 
-  paint_flags = CLUTTER_PAINT_FLAG_CLEAR;
+  paint_flags = CLUTTER_PAINT_FLAG_CLEAR | CLUTTER_PAINT_FLAG_FORCE_SCANOUT;
   switch (meta_screen_cast_stream_get_cursor_mode (stream))
     {
     case META_SCREEN_CAST_CURSOR_MODE_METADATA:
