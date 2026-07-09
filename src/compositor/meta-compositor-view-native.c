@@ -849,13 +849,13 @@ try_assign_next_scanout (MetaCompositorView *compositor_view,
   clutter_stage_view_assign_next_scanout (stage_view, scanout);
 }
 
-static void
+static gboolean
 try_assign_scanout_candidates (MetaCompositorView *compositor_view,
                                CoglOnscreen       *onscreen,
                                GList              *scanout_candidates)
 {
   if (!scanout_candidates)
-    return;
+    return FALSE;
 
   ClutterStageView *stage_view;
 
@@ -865,11 +865,12 @@ try_assign_scanout_candidates (MetaCompositorView *compositor_view,
   {
     meta_topic (META_DEBUG_RENDER,
                 "Scanout candidates are not compatible with the onscreen");
-    return;
+    return FALSE;
   }
 
   meta_topic (META_DEBUG_RENDER, "Assigning scanout to stage view");
   clutter_stage_view_assign_scanout (stage_view, scanout_candidates);
+  return TRUE;
 }
 
 static void
@@ -1019,7 +1020,14 @@ meta_compositor_view_native_maybe_assign_scanout (MetaCompositorViewNative *view
 */
       RefreshPlaneAssignation (compositor_view);
       acquire_scanout_for_candidates (compositor_view, onscreen, overlay_candidates, &scanout_candidates);
-      try_assign_scanout_candidates (compositor_view, onscreen, scanout_candidates);
+      if (!try_assign_scanout_candidates (compositor_view, onscreen, scanout_candidates))
+        {
+          if (scanout_candidates)
+            {
+              g_clear_pointer (&overlay_candidates, g_list_free);
+              g_list_free_full (g_steal_pointer(&scanout_candidates), g_object_unref);
+            }
+        }
     }
 
   update_scanout_candidate (view_native, overlay_candidates, crtc);

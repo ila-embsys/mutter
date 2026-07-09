@@ -1105,11 +1105,12 @@ meta_stage_impl_view (MetaStageImpl    *stage_impl,
      {
         priv->global_frame_counter++;
 
-        if (enable_scanout)
+        if (clutter_stage_view_has_scanout_clip (stage_view))
           clutter_stage_view_accumulate_scanout_clip (stage_view);
      }
     else
      {
+        // TODO Handle error cases based on what plane update we are doing
         g_object_unref (frame_info);
         if (g_error_matches (error,
                                COGL_SCANOUT_ERROR,
