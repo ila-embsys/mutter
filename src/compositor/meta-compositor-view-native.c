@@ -30,6 +30,9 @@
 #include "backends/native/meta-onscreen-native.h"
 #include "backends/native/meta-kms-plane.h"
 #include "backends/native/meta-kms-device.h"
+#include "backends/native/meta-crtc-mode-kms.h"
+#include "backends/native/meta-kms-mode.h"
+#include "backends/native/meta-kms-test-cache.h"
 #include "clutter/clutter.h"
 #include "compositor/compositor-private.h"
 #include "compositor/meta-window-actor-private.h"
@@ -852,7 +855,8 @@ try_assign_next_scanout (MetaCompositorView *compositor_view,
 static gboolean
 try_assign_scanout_candidates (MetaCompositorView *compositor_view,
                                CoglOnscreen       *onscreen,
-                               GList              *scanout_candidates)
+                               GList              *scanout_candidates,
+                               GBytes             *scanout_config_cache)
 {
   if (!scanout_candidates)
     return FALSE;
@@ -861,7 +865,7 @@ try_assign_scanout_candidates (MetaCompositorView *compositor_view,
 
   stage_view = meta_compositor_view_get_stage_view (compositor_view);
 
-  if(!meta_onscreen_native_is_scanout_candidates_compatible (onscreen, scanout_candidates))
+  if(!meta_onscreen_native_is_scanout_candidates_compatible (onscreen, scanout_candidates, scanout_config_cache))
   {
     meta_topic (META_DEBUG_RENDER,
                 "Scanout candidates are not compatible with the onscreen");
@@ -949,6 +953,55 @@ void RefreshPlaneAssignation (MetaCompositorView  *compositor_view)
     }
 }
 
+static MetaKmsTestCache *
+get_kms_test_cache (MetaCompositorView *compositor_view)
+{
+  ClutterStageView *stage_view =
+    meta_compositor_view_get_stage_view (compositor_view);
+  MetaStageView *view = META_STAGE_VIEW (stage_view);
+  MetaRendererView *renderer_view = META_RENDERER_VIEW (stage_view);
+  MetaCrtcKms *crtc_kms = META_CRTC_KMS (meta_renderer_view_get_crtc (renderer_view));
+  MetaKmsCrtc *kms_crtc = meta_crtc_kms_get_kms_crtc (crtc_kms);
+  MetaKmsDevice *kms_device = meta_kms_crtc_get_device (kms_crtc);
+
+  return meta_kms_device_get_test_cache (kms_device);
+}
+
+static GBytes *
+build_scanout_config_cache (MetaCompositorView *compositor_view,
+                            GList              *overlay_candidates)
+{
+  ClutterStageView *stage_view =
+    meta_compositor_view_get_stage_view (compositor_view);
+  MetaStageView *view = META_STAGE_VIEW (stage_view);
+  MetaRendererView *renderer_view = META_RENDERER_VIEW (stage_view);
+  MetaCrtc *crtc = meta_renderer_view_get_crtc (renderer_view);
+  MetaCrtcKms *crtc_kms = META_CRTC_KMS (crtc);
+  MetaKmsCrtc *kms_crtc = meta_crtc_kms_get_kms_crtc (crtc_kms);
+  MetaKmsDevice *kms_device = meta_kms_crtc_get_device (kms_crtc);
+  MetaKmsTestCache *kms_test_cache;
+  GBytes *test_cache_key;
+
+  kms_test_cache = meta_kms_device_get_test_cache (kms_device);
+
+  if (!kms_test_cache)
+    return NULL;
+
+  MetaKmsPlane *primary_plane = meta_crtc_kms_get_assigned_primary_plane (crtc_kms);
+  MetaKmsPlane *cursor_plane = meta_crtc_kms_get_assigned_cursor_plane (crtc_kms);
+
+  const MetaCrtcConfig *crtc_config = meta_crtc_get_config (crtc);
+  MetaKmsMode *kms_mode = meta_crtc_mode_kms_get_kms_mode (META_CRTC_MODE_KMS(crtc_config->mode));
+  const drmModeModeInfo *drm_mode = meta_kms_mode_get_drm_mode (kms_mode);
+  test_cache_key = meta_kms_test_cache_build_key (kms_test_cache,
+                                                  drm_mode,
+                                                  cursor_plane != NULL ? 1 : 0,
+                                                  g_list_length (overlay_candidates),
+                                                  primary_plane != NULL ? 1 : 0);
+  
+  return test_cache_key;
+}
+
 /*
 static void
 skip_candidate_paint (ClutterStageView *view, GList* candidates)
@@ -999,6 +1052,8 @@ meta_compositor_view_native_maybe_assign_scanout (MetaCompositorViewNative *view
   MetaCrtc *crtc = NULL;
   CoglOnscreen *onscreen = NULL;
   GList* overlay_candidates = NULL;
+  MetaKmsTestCache *kms_test_cache = NULL;
+  g_autoptr (GBytes) scanout_config_cache = NULL;
   gboolean candidate_found;
 
   candidate_found = find_scanout_candidate (compositor_view,
@@ -1010,6 +1065,8 @@ meta_compositor_view_native_maybe_assign_scanout (MetaCompositorViewNative *view
   if (candidate_found)
     {
       GList* scanout_candidates = NULL;
+      kms_test_cache = get_kms_test_cache (compositor_view);
+
 /*
       if (meta_get_debug_paint_flags () & META_DEBUG_PAINT_DISABLE_DIRECT_SCANOUT)
       {
@@ -1018,15 +1075,25 @@ meta_compositor_view_native_maybe_assign_scanout (MetaCompositorViewNative *view
         return;
       }
 */
+
       RefreshPlaneAssignation (compositor_view);
-      acquire_scanout_for_candidates (compositor_view, onscreen, overlay_candidates, &scanout_candidates);
-      if (!try_assign_scanout_candidates (compositor_view, onscreen, scanout_candidates))
+      scanout_config_cache = build_scanout_config_cache (compositor_view, overlay_candidates);
+
+      if (!meta_kms_test_cache_should_skip_atomic_check (kms_test_cache, scanout_config_cache))
         {
+          acquire_scanout_for_candidates (compositor_view, onscreen, overlay_candidates, &scanout_candidates);
           if (scanout_candidates)
             {
-              g_clear_pointer (&overlay_candidates, g_list_free);
-              g_list_free_full (g_steal_pointer(&scanout_candidates), g_object_unref);
+              if (!try_assign_scanout_candidates (compositor_view, onscreen, scanout_candidates, scanout_config_cache))
+                {
+                  g_clear_pointer (&overlay_candidates, g_list_free);
+                  g_list_free_full (g_steal_pointer(&scanout_candidates), g_object_unref);
+                }
             }
+        }
+      else
+        {
+          g_clear_pointer (&overlay_candidates, g_list_free);
         }
     }
 

@@ -47,7 +47,8 @@ gboolean meta_onscreen_native_is_buffer_scanout_compatible (CoglOnscreen *onscre
                                                             CoglScanout  *scanout);
 
 gboolean meta_onscreen_native_is_scanout_candidates_compatible (CoglOnscreen *onscreen,
-                                                                GList        *scanout_candidates);
+                                                                GList        *scanout_candidates,
+                                                                GBytes       *scanout_config_cache);
 
 void meta_onscreen_native_discard_pending_swaps (CoglOnscreen *onscreen);
 

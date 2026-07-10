@@ -43,6 +43,8 @@
 #include "backends/native/meta-kms-connector.h"
 #include "backends/native/meta-kms-device.h"
 #include "backends/native/meta-kms-plane.h"
+#include "backends/native/meta-kms-test-cache.h"
+#include "backends/native/meta-kms-mode.h"
 #include "backends/native/meta-kms-utils.h"
 #include "backends/native/meta-kms.h"
 #include "backends/native/meta-output-kms.h"
@@ -2454,7 +2456,8 @@ meta_onscreen_native_is_buffer_scanout_compatible (CoglOnscreen *onscreen,
 }
 
 gboolean meta_onscreen_native_is_scanout_candidates_compatible (CoglOnscreen *onscreen,
-                                                                GList        *scanout_candidates)
+                                                                GList        *scanout_candidates,
+                                                                GBytes       *scanout_config_cache)
 {
   MetaOnscreenNative *onscreen_native = META_ONSCREEN_NATIVE (onscreen);
   MetaCrtc *crtc = onscreen_native->crtc;
@@ -2464,6 +2467,7 @@ gboolean meta_onscreen_native_is_scanout_candidates_compatible (CoglOnscreen *on
   MetaKmsCrtc *kms_crtc;
   MetaKmsUpdate *test_update;
   MetaDrmBuffer *buffer;
+  MetaKmsTestCache *kms_test_cache;
   g_autoptr (MetaKmsFeedback) kms_feedback = NULL;
   MetaKmsFeedbackResult result = META_KMS_FEEDBACK_FAILED;
   graphene_rect_t src_rect;
@@ -2476,6 +2480,7 @@ gboolean meta_onscreen_native_is_scanout_candidates_compatible (CoglOnscreen *on
   gpu_kms = META_GPU_KMS (meta_crtc_get_gpu (crtc));
   kms_device = meta_gpu_kms_get_kms_device (gpu_kms);
   kms_crtc = meta_crtc_kms_get_kms_crtc (crtc_kms);
+  kms_test_cache = meta_kms_device_get_test_cache (kms_device);
 
   test_update = meta_kms_update_new (kms_device);
 
@@ -2526,8 +2531,7 @@ gboolean meta_onscreen_native_is_scanout_candidates_compatible (CoglOnscreen *on
         return TRUE;
       }
 
-    g_list_free_full (scanout_candidates, g_object_unref);
-
+    meta_kms_test_cache_record_failure (kms_test_cache, scanout_config_cache);
     error = meta_kms_feedback_get_error (kms_feedback);
     meta_topic (META_DEBUG_KMS,
                 "Test update for overlay plane %d failed: %s",
