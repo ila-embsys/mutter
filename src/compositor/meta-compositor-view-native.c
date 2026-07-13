@@ -738,6 +738,35 @@ probe_plane_budget (MetaCompositorView  *compositor_view,
 }
 
 static gboolean
+is_single_output_system (MetaCompositorView *compositor_view)
+{
+  ClutterStageView *stage_view =
+    meta_compositor_view_get_stage_view (compositor_view);
+  MetaStageView *view = META_STAGE_VIEW (stage_view);
+  MetaRendererView *renderer_view = META_RENDERER_VIEW (stage_view);
+  MetaCrtcKms *crtc_kms = META_CRTC_KMS (meta_renderer_view_get_crtc (renderer_view));
+  MetaKmsCrtc *kms_crtc = meta_crtc_kms_get_kms_crtc (crtc_kms);
+  MetaKmsDevice *kms_device = meta_kms_crtc_get_device (kms_crtc);
+
+  GList *crtc_list = meta_kms_device_get_crtcs (kms_device);
+  GList *iter = NULL;
+  guint active_crtcs = 0;
+
+  for (iter = crtc_list; iter != NULL; iter = iter->next)
+    {
+      kms_crtc = iter->data;
+
+      if (meta_kms_crtc_is_active (kms_crtc))
+        active_crtcs++;
+
+      if (active_crtcs > 1)
+        return FALSE;
+    }
+
+  return TRUE;
+}
+
+static gboolean
 find_scanout_candidate (MetaCompositorView  *compositor_view,
                         MetaCompositor      *compositor,
                         MetaCrtc           **crtc_out,
@@ -758,6 +787,11 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
     {
       meta_topic (META_DEBUG_RENDER,
                   "No direct scanout candidate: unredirect inhibited");
+      return FALSE;
+    }
+
+  if (!is_single_output_system (compositor_view))
+    {
       return FALSE;
     }
 
@@ -1168,6 +1202,14 @@ meta_compositor_view_native_maybe_update_fullscreen_actor (MetaCompositorViewNat
   update_fullscreen_actor (view_native, fullscreen_actor);
 }
 
+static void
+meta_compositor_view_native_invalidate_scanout_candidates (MetaCompositorView *view)
+{
+  MetaCompositorViewNative *view_native = META_COMPOSITOR_VIEW_NATIVE (view);
+
+  update_scanout_candidate (view_native, NULL, NULL);
+}
+
 MetaCompositorViewNative *
 meta_compositor_view_native_new (ClutterStageView *stage_view)
 {
@@ -1208,9 +1250,11 @@ static void
 meta_compositor_view_native_class_init (MetaCompositorViewNativeClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
+  MetaCompositorViewClass *view_class = META_COMPOSITOR_VIEW_CLASS (klass);
 
   object_class->dispose = meta_compositor_view_native_dispose;
   object_class->finalize = meta_compositor_view_native_finalize;
+  view_class->invalidate_scanout_candidates = meta_compositor_view_native_invalidate_scanout_candidates;
 }
 
 static void
