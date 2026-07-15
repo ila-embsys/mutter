@@ -43,6 +43,7 @@
 #include "wayland/meta-wayland-buffer.h"
 
 #include <pixman.h>
+#include <graphene-rect.h>
 #include "mtk/mtk-region.h"
 
 #include <drm_fourcc.h>
@@ -56,6 +57,7 @@ struct _MetaCursorOverlapData
 {
   MetaCompositor *compositor;
   ClutterStageView *stage_view;
+  MetaSurfaceActor *surface_actor;
   gboolean has_overlap;
 };
 
@@ -354,6 +356,67 @@ validate_color_state_for_scanout (MetaCompositorView *compositor_view,
 }
 
 static gboolean
+has_overlapping_cursor_overlay_foreach (ClutterStage  *stage,
+                                        ClutterSprite *sprite,
+                                        gpointer       user_data)
+{
+  MetaCursorOverlapData *data = user_data;
+  MetaBackend *backend = meta_compositor_get_backend (data->compositor);
+  MetaCursorRenderer *cursor_renderer;
+  ClutterCursor *cursor;
+  MtkRectangle view_rect;
+  graphene_rect_t graphene_actor_rect;
+  graphene_rect_t cursor_rect;
+
+  cursor_renderer = meta_backend_get_cursor_renderer_for_sprite (backend,
+                                                                 sprite);
+  if (!cursor_renderer)
+    return TRUE;
+  if (!meta_cursor_renderer_needs_overlay (cursor_renderer))
+    return TRUE;
+
+  cursor = meta_cursor_renderer_get_cursor (cursor_renderer);
+  cursor_rect = meta_cursor_renderer_calculate_rect (cursor_renderer,
+                                                     cursor);
+
+/*
+  clutter_stage_view_get_layout (data->stage_view, &view_rect);
+  graphene_view_rect = mtk_rectangle_to_graphene_rect (&view_rect);
+*/
+
+  clutter_actor_get_transformed_extents (CLUTTER_ACTOR(data->surface_actor), &graphene_actor_rect);
+  float device_scale = clutter_stage_view_get_scale (data->stage_view);
+
+  graphene_actor_rect.origin.x = floorf (graphene_actor_rect.origin.x * device_scale);
+  graphene_actor_rect.origin.y = floorf (graphene_actor_rect.origin.y * device_scale);
+  graphene_actor_rect.size.width = floorf (graphene_actor_rect.size.width * device_scale);
+  graphene_actor_rect.size.height = floorf (graphene_actor_rect.size.height * device_scale);
+
+  data->has_overlap |= graphene_rect_intersection (&graphene_actor_rect,
+                                                   &cursor_rect,
+                                                   NULL);
+  return !data->has_overlap;
+}
+
+static gboolean
+surface_actor_has_overlapping_cursor_overlays (MetaCompositor     *compositor,
+                                               MetaCompositorView *compositor_view,
+                                               MetaSurfaceActor   *surface_actor)
+{
+  MetaBackend *backend = meta_compositor_get_backend (compositor);
+  ClutterStage *stage = CLUTTER_STAGE (meta_backend_get_stage (backend));
+  ClutterStageView *stage_view =
+    meta_compositor_view_get_stage_view (compositor_view);
+  MetaCursorOverlapData data = { compositor, stage_view, surface_actor, FALSE };
+
+  clutter_stage_foreach_sprite (stage,
+                                has_overlapping_cursor_overlay_foreach,
+                                &data);
+
+  return data.has_overlap;
+}
+
+static gboolean
 find_overlay_candidates (MetaCompositorView *compositor_view,
                          MetaCompositor     *compositor,
                          ClutterActor       *clutter_actor,
@@ -372,6 +435,7 @@ find_overlay_candidates (MetaCompositorView *compositor_view,
   MtkRectangle view_rect;
 
   stage_view = meta_compositor_view_get_stage_view (compositor_view);
+  MetaStageView *view = META_STAGE_VIEW (stage_view);
   clutter_actor_get_content_box (clutter_actor, &actor_bounding_box);
   clutter_stage_view_get_layout (stage_view, &view_rect);
 
@@ -431,6 +495,7 @@ find_overlay_candidates (MetaCompositorView *compositor_view,
   gboolean surface_frequent_updates = FALSE;
   gboolean is_fully_opaque = FALSE;
   gboolean valid_color_state_for_scanout = FALSE;
+  gboolean is_overlapped_with_sw_cursor = FALSE;
   MtkRegionOverlap opaque_region_overlap;
   gboolean notCoveredByOpaque;
   gboolean notIntersectsEffected;
@@ -444,8 +509,11 @@ find_overlay_candidates (MetaCompositorView *compositor_view,
     {
       has_dmabuf_attribs = surfaceHasDMABufAttribs (surface);
       valid_color_state_for_scanout = validate_color_state_for_scanout (compositor_view, surface_actor);
+      is_overlapped_with_sw_cursor = !meta_stage_view_is_cursor_overlay_inhibited (view) &&
+                                      surface_actor_has_overlapping_cursor_overlays (compositor, compositor_view, surface_actor);
 
       gint64 frametime_us;
+
       if (meta_surface_actor_get_frame_time_estimation (surface_actor, &frametime_us))
         {
           surface_frequent_updates = frametime_us < (G_TIME_SPAN_SECOND / 20);
@@ -469,6 +537,7 @@ find_overlay_candidates (MetaCompositorView *compositor_view,
         has_dmabuf_attribs &&
         valid_color_state_for_scanout &&
         is_fully_opaque &&
+        !is_overlapped_with_sw_cursor &&
         notCoveredByOpaque &&
         notIntersectsEffected)
       {
@@ -532,190 +601,6 @@ find_overlay_candidates (MetaCompositorView *compositor_view,
 
   return TRUE;
 }
-
-static gboolean
-has_overlapping_cursor_overlay_foreach (ClutterStage  *stage,
-                                        ClutterSprite *sprite,
-                                        gpointer       user_data)
-{
-  MetaCursorOverlapData *data = user_data;
-  MetaBackend *backend = meta_compositor_get_backend (data->compositor);
-  MetaCursorRenderer *cursor_renderer;
-  ClutterCursor *cursor;
-  MtkRectangle view_rect;
-  graphene_rect_t graphene_view_rect;
-  graphene_rect_t cursor_rect;
-
-  cursor_renderer = meta_backend_get_cursor_renderer_for_sprite (backend,
-                                                                 sprite);
-  if (!cursor_renderer)
-    return TRUE;
-  if (!meta_cursor_renderer_needs_overlay (cursor_renderer))
-    return TRUE;
-
-  cursor = meta_cursor_renderer_get_cursor (cursor_renderer);
-  cursor_rect = meta_cursor_renderer_calculate_rect (cursor_renderer,
-                                                     cursor);
-
-  clutter_stage_view_get_layout (data->stage_view, &view_rect);
-  graphene_view_rect = mtk_rectangle_to_graphene_rect (&view_rect);
-
-  data->has_overlap |= graphene_rect_intersection (&graphene_view_rect,
-                                                   &cursor_rect,
-                                                   NULL);
-  return !data->has_overlap;
-}
-
-static gboolean
-surface_actor_has_overlapping_cursor_overlays (MetaCompositor     *compositor,
-                                               MetaCompositorView *compositor_view,
-                                               MetaSurfaceActor   *surface_actor)
-{
-  MetaBackend *backend = meta_compositor_get_backend (compositor);
-  ClutterStage *stage = CLUTTER_STAGE (meta_backend_get_stage (backend));
-  ClutterStageView *stage_view =
-    meta_compositor_view_get_stage_view (compositor_view);
-  MetaCursorOverlapData data = { compositor, stage_view, FALSE };
-
-  clutter_stage_foreach_sprite (stage,
-                                has_overlapping_cursor_overlay_foreach,
-                                &data);
-
-  return data.has_overlap;
-}
-
-#if 0
-static gboolean
-find_scanout_candidate (MetaCompositorView  *compositor_view,
-                        MetaCompositor      *compositor,
-                        MetaCrtc           **crtc_out,
-                        CoglOnscreen       **onscreen_out,
-                        MetaWaylandSurface **surface_out)
-{
-  ClutterStageView *stage_view =
-    meta_compositor_view_get_stage_view (compositor_view);
-  MetaStageView *view = META_STAGE_VIEW (stage_view);
-  MetaRendererView *renderer_view = META_RENDERER_VIEW (stage_view);
-  MetaCrtc *crtc;
-  CoglFramebuffer *framebuffer;
-  MetaSurfaceActor *surface_actor;
-  MetaSurfaceActorWayland *surface_actor_wayland;
-  MetaWaylandSurface *surface;
-
-  if (meta_get_debug_paint_flags () & META_DEBUG_PAINT_DISABLE_DIRECT_SCANOUT)
-    return FALSE;
-
-  GList* window_actors = meta_compositor_get_window_actors (compositor);
-  MtkRegion* occupied_region = mtk_region_create();
-  MtkRegion* opaque_region = mtk_region_create();
-  GList* overlay_candidates = NULL;
-  GList* underlay_candidates = NULL;
-  GList* reverse_iter = NULL;
-  
-  meta_topic (META_DEBUG_MOHAN, "***** -- Finding Overlay Candidates for Window Group: %d window actors -- *****", g_list_length (window_actors));
-  for (reverse_iter = g_list_last (window_actors); reverse_iter != NULL; reverse_iter = reverse_iter->prev)
-    {
-      ClutterActor *clutter_actor = CLUTTER_ACTOR (reverse_iter->data);
-      find_overlay_candidates (compositor_view, compositor,
-                               clutter_actor,
-                               occupied_region, opaque_region,
-                               &overlay_candidates, &underlay_candidates);
-      // meta_topic (META_DEBUG_MOHAN, "Next Candidate Tree");
-    }
-   meta_topic (META_DEBUG_MOHAN, "Overlay Candidates: %d Underlay Candidates: %d", g_list_length (overlay_candidates), g_list_length (underlay_candidates));
-   meta_topic (META_DEBUG_MOHAN, "***** -- Finished Candidate Findings -- *****");
-  /*surface_actor = find_candidate (compositor_view,
-                                  compositor,
-                                  "direct scanout");
-  if (!surface_actor)
-    return FALSE;*/
-
-  if (!meta_stage_view_is_cursor_overlay_inhibited (view) &&
-      surface_actor_has_overlapping_cursor_overlays (compositor,
-                                                     compositor_view,
-                                                     surface_actor))
-    {
-      meta_topic (META_DEBUG_RENDER,
-                  "No direct scanout candidate: overlapping software cursors");
-      return FALSE;
-    }
-
-  crtc = meta_renderer_view_get_crtc (renderer_view);
-  if (!META_IS_CRTC_KMS (crtc))
-    {
-      meta_topic (META_DEBUG_RENDER,
-                  "No direct scanout candidate: no KMS CRTC");
-      return FALSE;
-    }
-
-  framebuffer = clutter_stage_view_get_onscreen (stage_view);
-  if (!COGL_IS_ONSCREEN (framebuffer))
-    {
-      meta_topic (META_DEBUG_RENDER,
-                  "No direct scanout candidate: no onscreen framebuffer");
-      return FALSE;
-    }
-
-  if (clutter_stage_view_has_shadowfb (stage_view))
-    {
-      meta_topic (META_DEBUG_RENDER,
-                  "No direct scanout candidate: stage-view has shadowfb");
-      return FALSE;
-    }
-
-  if (!(meta_get_debug_paint_flags () &
-        META_DEBUG_PAINT_IGNORE_COLOR_STATE_FOR_DIRECT_SCANOUT))
-    {
-      ClutterColorState *output_color_state;
-      ClutterColorState *surface_color_state;
-
-      output_color_state =
-        clutter_stage_view_get_output_color_state (CLUTTER_STAGE_VIEW (view));
-      surface_color_state =
-        clutter_actor_get_color_state (CLUTTER_ACTOR (surface_actor));
-      if (clutter_color_state_needs_mapping (surface_color_state, output_color_state))
-        {
-          meta_topic (META_DEBUG_RENDER,
-                      "No direct scanout candidate: "
-                      "surface color state (%s) needs mapping to the output's (%s)",
-                      clutter_color_state_to_string (surface_color_state),
-                      clutter_color_state_to_string (output_color_state));
-          return FALSE;
-        }
-    }
-
-  surface_actor_wayland = META_SURFACE_ACTOR_WAYLAND (surface_actor);
-  surface = meta_surface_actor_wayland_get_surface (surface_actor_wayland);
-  if (!surface)
-    {
-      meta_topic (META_DEBUG_RENDER,
-                  "No direct scanout candidate: no surface");
-      return FALSE;
-    }
-
-  if (!(meta_get_debug_paint_flags () &
-        META_DEBUG_PAINT_IGNORE_COLOR_STATE_FOR_DIRECT_SCANOUT))
-    {
-      MetaMultiTextureCoefficients coeffs;
-
-      coeffs = surface->applied_state.coeffs;
-      if (coeffs != META_MULTI_TEXTURE_COEFFICIENTS_NONE &&
-          coeffs != META_MULTI_TEXTURE_COEFFICIENTS_IDENTITY_FULL &&
-          coeffs != META_MULTI_TEXTURE_COEFFICIENTS_BT709_LIMITED)
-        {
-          meta_topic (META_DEBUG_RENDER,
-                      "No direct scanout candidate: unsupported color model");
-          return FALSE;
-        }
-    }
-
-  *crtc_out = crtc;
-  *onscreen_out = COGL_ONSCREEN (framebuffer);
-  *surface_out = surface;
-
-  return TRUE;
-}
-#else
 
 static void
 probe_plane_budget (MetaCompositorView  *compositor_view,
@@ -785,6 +670,7 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
 {
   ClutterStageView *stage_view =
     meta_compositor_view_get_stage_view (compositor_view);
+  MetaStageView *view = META_STAGE_VIEW (stage_view);
   MetaRendererView *renderer_view = META_RENDERER_VIEW (stage_view);
   MetaCrtc *crtc;
   CoglFramebuffer *framebuffer;
@@ -837,7 +723,7 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
     }
   meta_topic (META_DEBUG_MOHAN, "Overlay Candidates: %d Underlay Candidates: %d", g_list_length (overlay_candidates), g_list_length (underlay_candidates));
   meta_topic (META_DEBUG_MOHAN, "***** -- Finished Candidate Findings -- *****");
-  
+
   crtc = meta_renderer_view_get_crtc (renderer_view);
   if (!META_IS_CRTC_KMS (crtc))
     {
@@ -860,8 +746,6 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
                   "No direct scanout candidate: stage-view has shadowfb");
       return FALSE;
     }
-  
-  /* TODO Add Mutter's Post Candidate Selection cases*/
 
   *crtc_out = crtc;
   *onscreen_out = COGL_ONSCREEN (framebuffer);
@@ -869,7 +753,6 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
 
   return *overlay_candidates_out != NULL;
 }
-#endif
 
 static void
 try_assign_next_scanout (MetaCompositorView *compositor_view,
