@@ -64,7 +64,7 @@ struct _MetaCompositorViewNative
   MetaCompositorView parent;
 
   MetaWaylandSurface *scanout_candidate;
-  GList* scanound_candidate_list;
+  GList* scanout_candidates;
 
   MetaSurfaceActor *fullscreen_actor;
 
@@ -106,54 +106,13 @@ on_fullscreen_actor_destroyed (MetaSurfaceActor         *surface_actor,
   update_fullscreen_actor (view_native, NULL);
 }
 
-#if 0
-static void
-update_scanout_candidate (MetaCompositorViewNative *view_native,
-                          CoglOnscreen             *onscreen,
-                          GList                    *scanout_candidates,
-                          MetaCrtc                 *crtc)
-{
-  MetaCompositorView *compositor_view = META_COMPOSITOR_VIEW (view_native);
-  ClutterStageView *stage_view =
-    meta_compositor_view_get_stage_view (compositor_view);
-  CoglFramebuffer *framebuffer = 
-    clutter_stage_view_get_onscreen (stage_view);
-
-  if (!COGL_IS_ONSCREEN (framebuffer))
-    {
-      meta_topic (META_DEBUG_MOHAN,
-                  "No onscreen framebuffer");
-      return;
-    }
-
-  onscreen = COGL_ONSCREEN (framebuffer);
-  MetaOnscreenNative *onscreen_native = META_ONSCREEN_NATIVE (onscreen);
-  ClutterFrame* presented_frame = meta_onscreen_native_get_presented_frame (onscreen_native);
-  
-  meta_
-  if (view_native->scanout_candidate &&
-      view_native->scanout_candidate != surface)
-    {
-      meta_wayland_surface_set_scanout_candidate (view_native->scanout_candidate,
-                                                  NULL);
-      g_clear_weak_pointer (&view_native->scanout_candidate);
-    }
-
-  if (surface)
-    {
-      meta_wayland_surface_set_scanout_candidate (surface, crtc);
-      g_set_weak_pointer (&view_native->scanout_candidate,
-                          surface);
-    }
-}
-#else
 static void
 update_scanout_candidate (MetaCompositorViewNative *view_native,
                           GList                    *scanout_candidates,
                           MetaCrtc                 *crtc)
 {
   GList *iter;
-  for (iter = view_native->scanound_candidate_list; iter != NULL; iter = iter->next)
+  for (iter = view_native->scanout_candidates; iter != NULL; iter = iter->next)
   {
     MetaSurfaceActor *surface_actor = iter->data;
     MetaWaylandSurface *surface = meta_surface_actor_wayland_get_surface ( META_SURFACE_ACTOR_WAYLAND(surface_actor) );
@@ -173,8 +132,8 @@ update_scanout_candidate (MetaCompositorViewNative *view_native,
     if(surface)
       meta_wayland_surface_set_scanout_candidate (surface, crtc);
   }
-
-  view_native->scanound_candidate_list = scanout_candidates;
+  // TODO revisit to correctly ref the candidate_list
+  view_native->scanout_candidates = scanout_candidates;
 /*
   if (view_native->scanout_candidate &&
       view_native->scanout_candidate != surface)
@@ -192,7 +151,7 @@ update_scanout_candidate (MetaCompositorViewNative *view_native,
     }
 */
 }
-#endif
+
 static MetaSurfaceActor *
 find_candidate (MetaCompositorView *compositor_view,
                 MetaCompositor     *compositor,
@@ -285,7 +244,8 @@ find_candidate (MetaCompositorView *compositor_view,
   return surface_actor;
 }
 
-static gboolean surfaceHasDMABufAttribs (MetaWaylandSurface *surface)
+static gboolean
+surfaceHasDMABufAttribs (MetaWaylandSurface *surface)
 {
   if (!surface)
     return FALSE;
@@ -300,12 +260,14 @@ static gboolean surfaceHasDMABufAttribs (MetaWaylandSurface *surface)
   return buffer->type == META_WAYLAND_BUFFER_TYPE_DMA_BUF && dma_buf != NULL;
 }
 
-static gboolean region_intersects_rect (MtkRegion *region, MtkRectangle *rect)
+static gboolean
+region_intersects_rect (MtkRegion *region, MtkRectangle *rect)
 {
   return mtk_region_contains_rectangle (region, rect) != MTK_REGION_OVERLAP_OUT;
 }
 
-static void map_rect_to_device_space (MetaCompositorView *compositor_view,
+static void
+map_rect_to_device_space (MetaCompositorView *compositor_view,
                                       ClutterActor *clutter_actor,
                                       MtkRectangle *device_space_rect)
 {
@@ -324,7 +286,8 @@ static void map_rect_to_device_space (MetaCompositorView *compositor_view,
   };
 }
 
-static void map_region_to_device_space (MetaCompositorView *compositor_view,
+static void
+map_region_to_device_space (MetaCompositorView *compositor_view,
                                         ClutterActor *clutter_actor,
                                         MtkRegion *region,
                                         MtkRegion **device_space_region)
@@ -344,18 +307,19 @@ static void map_region_to_device_space (MetaCompositorView *compositor_view,
   *device_space_region = mtk_region_builder_finish (&builder);
 }
 
-gboolean find_overlay_candidates (MetaCompositorView *compositor_view,
-                                  MetaCompositor     *compositor,
-                                  ClutterActor       *clutter_actor,
-                                  guint32             max_scanout_count,
-                                  guint32             max_overlay_count,
-                                  MtkRegion          *occupied_region,
-                                  MtkRegion          *opaque_region,
-                                  MtkRegion          *effected_region,
-                                  GList              **overlay_candidates,
-                                  GList              **underlay_candidates
-                                // TODO maybe it needs to keep track window corners for better candidate selection
-                                        )
+static gboolean
+find_overlay_candidates (MetaCompositorView *compositor_view,
+                         MetaCompositor     *compositor,
+                         ClutterActor       *clutter_actor,
+                         guint32             max_scanout_count,
+                         guint32             max_overlay_count,
+                         MtkRegion          *occupied_region,
+                         MtkRegion          *opaque_region,
+                         MtkRegion          *effected_region,
+                         GList              **overlay_candidates,
+                         GList              **underlay_candidates
+                        // TODO maybe it needs to keep track window corners for better candidate selection
+                        )
 {
   ClutterStageView* stage_view;
   ClutterActorBox actor_bounding_box;
@@ -420,7 +384,6 @@ gboolean find_overlay_candidates (MetaCompositorView *compositor_view,
   gboolean has_dmabuf_attribs = FALSE;
   gboolean surface_frequent_updates = FALSE;
   gboolean is_fully_opaque = FALSE;
-  guint8 actor_opacity = 0;
   MtkRegionOverlap opaque_region_overlap;
   gboolean notCoveredByOpaque;
   gboolean notIntersectsEffected;
@@ -712,7 +675,6 @@ probe_plane_budget (MetaCompositorView  *compositor_view,
 {
   ClutterStageView *stage_view =
     meta_compositor_view_get_stage_view (compositor_view);
-  MetaStageView *view = META_STAGE_VIEW (stage_view);
   MetaRendererView *renderer_view = META_RENDERER_VIEW (stage_view);
   MetaCrtcKms *crtc_kms = META_CRTC_KMS (meta_renderer_view_get_crtc (renderer_view));
   MetaKmsCrtc *kms_crtc = meta_crtc_kms_get_kms_crtc (crtc_kms);
@@ -742,7 +704,6 @@ is_single_output_system (MetaCompositorView *compositor_view)
 {
   ClutterStageView *stage_view =
     meta_compositor_view_get_stage_view (compositor_view);
-  MetaStageView *view = META_STAGE_VIEW (stage_view);
   MetaRendererView *renderer_view = META_RENDERER_VIEW (stage_view);
   MetaCrtcKms *crtc_kms = META_CRTC_KMS (meta_renderer_view_get_crtc (renderer_view));
   MetaKmsCrtc *kms_crtc = meta_crtc_kms_get_kms_crtc (crtc_kms);
@@ -775,7 +736,6 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
 {
   ClutterStageView *stage_view =
     meta_compositor_view_get_stage_view (compositor_view);
-  MetaStageView *view = META_STAGE_VIEW (stage_view);
   MetaRendererView *renderer_view = META_RENDERER_VIEW (stage_view);
   MetaCrtc *crtc;
   CoglFramebuffer *framebuffer;
@@ -868,8 +828,7 @@ try_assign_next_scanout (MetaCompositorView *compositor_view,
                          MetaWaylandSurface *surface)
 {
   ClutterStageView *stage_view;
-  //g_autoptr (CoglScanout) scanout = NULL;
-  CoglScanout *scanout = NULL;
+  g_autoptr (CoglScanout) scanout = NULL;
 
   stage_view = meta_compositor_view_get_stage_view (compositor_view);
   scanout = meta_wayland_surface_try_acquire_scanout (surface,
@@ -940,38 +899,11 @@ acquire_scanout_for_candidates (MetaCompositorView *compositor_view,
     }
 }
 
-#if 0
-void
-meta_compositor_view_native_maybe_assign_scanout (MetaCompositorViewNative *view_native,
-                                                  MetaCompositor           *compositor)
-{
-  MetaCompositorView *compositor_view = META_COMPOSITOR_VIEW (view_native);
-  MetaCrtc *crtc = NULL;
-  CoglOnscreen *onscreen = NULL;
-  MetaWaylandSurface *surface = NULL;
-  gboolean candidate_found;
-
-  candidate_found = find_scanout_candidate (compositor_view,
-                                            compositor,
-                                            &crtc,
-                                            &onscreen,
-                                            &surface);
-  if (candidate_found)
-    {
-      try_assign_next_scanout (compositor_view,
-                               onscreen,
-                               surface);
-    }
-
-  update_scanout_candidate (view_native, surface, crtc);
-}
-#else
-
-void RefreshPlaneAssignation (MetaCompositorView  *compositor_view)
+static void
+refresh_plane_assignation (MetaCompositorView  *compositor_view)
 {
   ClutterStageView *stage_view =
     meta_compositor_view_get_stage_view (compositor_view);
-  MetaStageView *view = META_STAGE_VIEW (stage_view);
   MetaRendererView *renderer_view = META_RENDERER_VIEW (stage_view); 
 
   MetaCrtc *crtc = meta_renderer_view_get_crtc (renderer_view);
@@ -992,7 +924,6 @@ get_kms_test_cache (MetaCompositorView *compositor_view)
 {
   ClutterStageView *stage_view =
     meta_compositor_view_get_stage_view (compositor_view);
-  MetaStageView *view = META_STAGE_VIEW (stage_view);
   MetaRendererView *renderer_view = META_RENDERER_VIEW (stage_view);
   MetaCrtcKms *crtc_kms = META_CRTC_KMS (meta_renderer_view_get_crtc (renderer_view));
   MetaKmsCrtc *kms_crtc = meta_crtc_kms_get_kms_crtc (crtc_kms);
@@ -1007,7 +938,6 @@ build_scanout_config_cache (MetaCompositorView *compositor_view,
 {
   ClutterStageView *stage_view =
     meta_compositor_view_get_stage_view (compositor_view);
-  MetaStageView *view = META_STAGE_VIEW (stage_view);
   MetaRendererView *renderer_view = META_RENDERER_VIEW (stage_view);
   MetaCrtc *crtc = meta_renderer_view_get_crtc (renderer_view);
   MetaCrtcKms *crtc_kms = META_CRTC_KMS (crtc);
@@ -1110,7 +1040,7 @@ meta_compositor_view_native_maybe_assign_scanout (MetaCompositorViewNative *view
       }
 */
 
-      RefreshPlaneAssignation (compositor_view);
+      refresh_plane_assignation (compositor_view);
       scanout_config_cache = build_scanout_config_cache (compositor_view, overlay_candidates);
 
       if (!meta_kms_test_cache_should_skip_atomic_check (kms_test_cache, scanout_config_cache))
@@ -1133,8 +1063,6 @@ meta_compositor_view_native_maybe_assign_scanout (MetaCompositorViewNative *view
 
   update_scanout_candidate (view_native, overlay_candidates, crtc);
 }
-
-#endif
 
 static MetaSurfaceActor *
 find_fullscreen_candidate (MetaCompositorView *compositor_view,

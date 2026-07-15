@@ -1192,21 +1192,6 @@ probe_region (ClutterStageView *stage_view, GList *scanout_list)
   meta_topic (META_DEBUG_MOHAN, "***** Probe Scanout & Redraw Region Ends *****");
 }
 
-static gboolean
-go_for_scanout ( const MtkRegion* scanout_region, const MtkRectangle* redraw_rect)
-{
-  int num_rects = mtk_region_num_rectangles (scanout_region);
-
-  for (int i = 0; i < num_rects; i++)
-    {
-      MtkRectangle scanout_rect = mtk_region_get_rectangle (scanout_region, i);
-
-      if ( mtk_rectangle_contains_rect (&scanout_rect, redraw_rect) )
-        return TRUE;
-    }
-  return FALSE;
-}
-
 static void
 meta_stage_impl_redraw_view (ClutterStageWindow *stage_window,
                              ClutterStageView   *stage_view,
@@ -1220,8 +1205,6 @@ meta_stage_impl_redraw_view (ClutterStageWindow *stage_window,
 
   gboolean enable_primary_refresh = FALSE;
   gboolean enable_scanout = FALSE;
-
-  MtkRegion *scanout_region;
 
   probe_region (stage_view, scanout_list);
   if (scanout_list)
