@@ -308,6 +308,52 @@ map_region_to_device_space (MetaCompositorView *compositor_view,
 }
 
 static gboolean
+validate_color_state_for_scanout (MetaCompositorView *compositor_view,
+                                  MetaSurfaceActor   *surface_actor)
+{
+  ClutterStageView *stage_view =
+    meta_compositor_view_get_stage_view (compositor_view);
+  MetaStageView *view = META_STAGE_VIEW (stage_view);
+  MetaSurfaceActorWayland *surface_actor_wayland = META_SURFACE_ACTOR_WAYLAND (surface_actor);
+  MetaWaylandSurface *surface = meta_surface_actor_wayland_get_surface (surface_actor_wayland);
+
+  if (!(meta_get_debug_paint_flags () &
+        META_DEBUG_PAINT_IGNORE_COLOR_STATE_FOR_DIRECT_SCANOUT))
+    {
+      ClutterColorState *output_color_state;
+      ClutterColorState *surface_color_state;
+
+      output_color_state =
+        clutter_stage_view_get_output_color_state (CLUTTER_STAGE_VIEW (view));
+      surface_color_state =
+        clutter_actor_get_color_state (CLUTTER_ACTOR (surface_actor));
+      if (clutter_color_state_needs_mapping (surface_color_state, output_color_state))
+        {
+          meta_topic (META_DEBUG_RENDER,
+                      "No direct scanout candidate: "
+                      "surface color state (%s) needs mapping to the output's (%s)",
+                      clutter_color_state_to_string (surface_color_state),
+                      clutter_color_state_to_string (output_color_state));
+          return FALSE;
+        }
+
+      MetaMultiTextureCoefficients coeffs;
+
+      coeffs = surface->applied_state.coeffs;
+      if (coeffs != META_MULTI_TEXTURE_COEFFICIENTS_NONE &&
+          coeffs != META_MULTI_TEXTURE_COEFFICIENTS_IDENTITY_FULL &&
+          coeffs != META_MULTI_TEXTURE_COEFFICIENTS_BT709_LIMITED)
+        {
+          meta_topic (META_DEBUG_RENDER,
+                      "No direct scanout candidate: unsupported color model");
+          return FALSE;
+        }
+    }
+
+  return TRUE;
+}
+
+static gboolean
 find_overlay_candidates (MetaCompositorView *compositor_view,
                          MetaCompositor     *compositor,
                          ClutterActor       *clutter_actor,
@@ -384,6 +430,7 @@ find_overlay_candidates (MetaCompositorView *compositor_view,
   gboolean has_dmabuf_attribs = FALSE;
   gboolean surface_frequent_updates = FALSE;
   gboolean is_fully_opaque = FALSE;
+  gboolean valid_color_state_for_scanout = FALSE;
   MtkRegionOverlap opaque_region_overlap;
   gboolean notCoveredByOpaque;
   gboolean notIntersectsEffected;
@@ -396,6 +443,7 @@ find_overlay_candidates (MetaCompositorView *compositor_view,
   if (has_surface_actor)
     {
       has_dmabuf_attribs = surfaceHasDMABufAttribs (surface);
+      valid_color_state_for_scanout = validate_color_state_for_scanout (compositor_view, surface_actor);
 
       gint64 frametime_us;
       if (meta_surface_actor_get_frame_time_estimation (surface_actor, &frametime_us))
@@ -419,6 +467,7 @@ find_overlay_candidates (MetaCompositorView *compositor_view,
     if (has_surface_actor &&
         surface_frequent_updates &&
         has_dmabuf_attribs &&
+        valid_color_state_for_scanout &&
         is_fully_opaque &&
         notCoveredByOpaque &&
         notIntersectsEffected)
