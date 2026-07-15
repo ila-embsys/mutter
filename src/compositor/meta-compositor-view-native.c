@@ -484,7 +484,6 @@ find_overlay_candidates (MetaCompositorView *compositor_view,
   return TRUE;
 }
 
-#if 0
 static gboolean
 has_overlapping_cursor_overlay_foreach (ClutterStage  *stage,
                                         ClutterSprite *sprite,
@@ -536,6 +535,7 @@ surface_actor_has_overlapping_cursor_overlays (MetaCompositor     *compositor,
   return data.has_overlap;
 }
 
+#if 0
 static gboolean
 find_scanout_candidate (MetaCompositorView  *compositor_view,
                         MetaCompositor      *compositor,
@@ -579,7 +579,7 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
                                   compositor,
                                   "direct scanout");
   if (!surface_actor)
-    return FALSE;
+    return FALSE;*/
 
   if (!meta_stage_view_is_cursor_overlay_inhibited (view) &&
       surface_actor_has_overlapping_cursor_overlays (compositor,
