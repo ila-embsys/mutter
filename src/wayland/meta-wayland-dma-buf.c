@@ -1688,8 +1688,6 @@ update_surface_feedback_tranches (MetaWaylandDmaBufSurfaceFeedback *surface_feed
   if (crtc)
     {
       ensure_scanout_tranche (surface_feedback, crtc);
-      meta_surface_actor_set_opaque_region (surface_actor, NULL);
-      clutter_actor_queue_redraw (clutter_actor);
       clutter_actor_set_skip_paint (clutter_actor, TRUE);
     }
   else
