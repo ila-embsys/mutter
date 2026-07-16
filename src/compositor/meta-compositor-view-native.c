@@ -247,15 +247,16 @@ surfaceHasDMABufAttribs (MetaWaylandSurface *surface)
 }
 
 static gboolean
-region_intersects_rect (MtkRegion *region, MtkRectangle *rect)
+region_intersects_rect (MtkRegion     *region,
+                        MtkRectangle  *rect)
 {
   return mtk_region_contains_rectangle (region, rect) != MTK_REGION_OVERLAP_OUT;
 }
-// TODO Correct it for code-review
+
 static void
 map_rect_to_device_space (MetaCompositorView *compositor_view,
-                                      ClutterActor *clutter_actor,
-                                      MtkRectangle *device_space_rect)
+                          ClutterActor       *clutter_actor,
+                          MtkRectangle       *device_space_rect)
 {
   ClutterStageView *stage_view = meta_compositor_view_get_stage_view (compositor_view);
   graphene_rect_t actor_rect;
@@ -271,12 +272,12 @@ map_rect_to_device_space (MetaCompositorView *compositor_view,
     .height = (int) floorf (actor_rect.size.height * device_scale)
   };
 }
-// TODO Correct it for code-review
+
 static void
-map_region_to_device_space (MetaCompositorView *compositor_view,
-                                        ClutterActor *clutter_actor,
-                                        MtkRegion *region,
-                                        MtkRegion **device_space_region)
+map_region_to_device_space (MetaCompositorView  *compositor_view,
+                            ClutterActor        *clutter_actor,
+                            MtkRegion           *region,
+                            MtkRegion          **device_space_region)
 {
   MtkRegionBuilder builder;
   mtk_region_builder_init (&builder);
@@ -404,9 +405,7 @@ find_overlay_candidates (MetaCompositorView *compositor_view,
                          MtkRegion          *opaque_region,
                          MtkRegion          *effected_region,
                          GList              **overlay_candidates,
-                         GList              **underlay_candidates
-                        // TODO maybe it needs to keep track window corners for better candidate selection
-                        )
+                         GList              **underlay_candidates)
 {
   ClutterStageView* stage_view;
   ClutterActorBox actor_bounding_box;
@@ -526,7 +525,7 @@ find_overlay_candidates (MetaCompositorView *compositor_view,
         // TODO Also Check Max Scanout & Underlay Count once underlay is considered
         if (g_list_length (*overlay_candidates) > max_overlay_count)
           {
-            // TODO Add a Log for plane count has been exhausted
+            meta_topic (META_DEBUG_RENDER, "Plane Limits Reached");
             return FALSE;
           }
       }
