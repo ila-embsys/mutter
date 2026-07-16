@@ -91,7 +91,6 @@ typedef struct _ClutterStageViewPrivate
   gboolean has_accumulated_redraw_clip;
   MtkRegion *accumulated_redraw_clip;
   gboolean has_scanout_clip;
-  // WATCH: Memory-leak
   MtkRegion *scanout_clip;
 
   float refresh_rate;
@@ -1400,6 +1399,7 @@ clutter_stage_view_dispose (GObject *object)
   g_clear_object (&priv->output_color_state);
   g_clear_pointer (&priv->redraw_clip, mtk_region_unref);
   g_clear_pointer (&priv->accumulated_redraw_clip, mtk_region_unref);
+  g_clear_pointer (&priv->scanout_clip, mtk_region_unref);
   g_clear_pointer (&priv->frame_clock, clutter_frame_clock_destroy);
   g_clear_handle_id (&priv->ensure_offscreen_idle_id, g_source_remove);
 

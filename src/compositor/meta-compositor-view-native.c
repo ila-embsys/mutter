@@ -66,8 +66,7 @@ struct _MetaCompositorViewNative
   MetaCompositorView parent;
 
   MetaWaylandSurface *scanout_candidate;
-  // TODO Watch for mem-leaks ?
-  GList* scanout_candidates;
+  GList* scanout_surface_actor_candidates;
 
   MetaSurfaceActor *fullscreen_actor;
 
@@ -111,23 +110,23 @@ on_fullscreen_actor_destroyed (MetaSurfaceActor         *surface_actor,
 
 static void
 update_scanout_candidate (MetaCompositorViewNative *view_native,
-                          GList                    *scanout_candidates,
+                          GList                    *scanout_surface_actor_candidates,
                           MetaCrtc                 *crtc)
 {
   GList *iter;
-  for (iter = view_native->scanout_candidates; iter != NULL; iter = iter->next)
+  for (iter = view_native->scanout_surface_actor_candidates; iter != NULL; iter = iter->next)
   {
     MetaSurfaceActor *surface_actor = iter->data;
     MetaWaylandSurface *surface = meta_surface_actor_wayland_get_surface ( META_SURFACE_ACTOR_WAYLAND(surface_actor) );
     
-    if(!g_list_find(scanout_candidates, surface_actor))
+    if(!g_list_find(scanout_surface_actor_candidates, surface_actor))
      {
       if(surface)
         meta_wayland_surface_set_scanout_candidate (surface, NULL);
      }
   }
 
-  for (iter = scanout_candidates; iter != NULL; iter = iter->next)
+  for (iter = scanout_surface_actor_candidates; iter != NULL; iter = iter->next)
   {
     MetaSurfaceActor *surface_actor = iter->data;
     MetaWaylandSurface *surface = meta_surface_actor_wayland_get_surface ( META_SURFACE_ACTOR_WAYLAND(surface_actor) );
@@ -135,8 +134,8 @@ update_scanout_candidate (MetaCompositorViewNative *view_native,
     if(surface)
       meta_wayland_surface_set_scanout_candidate (surface, crtc);
   }
-  // TODO revisit to correctly ref the candidate_list & check org code for refer
-  view_native->scanout_candidates = scanout_candidates;
+  g_clear_pointer (&view_native->scanout_surface_actor_candidates, g_list_free);
+  view_native->scanout_surface_actor_candidates = g_steal_pointer (&scanout_surface_actor_candidates);
 }
 
 static MetaSurfaceActor *
@@ -650,11 +649,13 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
     {
       return FALSE;
     }
-// TODO Make sure the Regions are unref
   GList* window_actors = meta_compositor_get_window_actors (compositor);
-  MtkRegion* occupied_region = mtk_region_create();
-  MtkRegion* opaque_region = mtk_region_create();
-  MtkRegion* effected_region = mtk_region_create();
+  g_autoptr (MtkRegion) occupied_region = NULL;
+  g_autoptr (MtkRegion) opaque_region = NULL;
+  g_autoptr (MtkRegion) effected_region = NULL;
+  occupied_region = mtk_region_create();
+  opaque_region = mtk_region_create();
+  effected_region = mtk_region_create();
   guint32 max_scanout_count;
   guint32 max_overlay_count;
   GList* overlay_candidates = NULL;
@@ -862,6 +863,7 @@ meta_compositor_view_native_maybe_assign_scanout (MetaCompositorViewNative *view
   MetaCrtc *crtc = NULL;
   CoglOnscreen *onscreen = NULL;
   GList* overlay_candidates = NULL;
+  GList* scanout_candidates = NULL;
   MetaKmsTestCache *kms_test_cache = NULL;
   g_autoptr (GBytes) scanout_config_cache = NULL;
   gboolean candidate_found;
@@ -874,8 +876,6 @@ meta_compositor_view_native_maybe_assign_scanout (MetaCompositorViewNative *view
 
   if (candidate_found)
     {
-      // TODO Move scanout_candidates with other decl
-      GList* scanout_candidates = NULL;
       kms_test_cache = get_kms_test_cache (compositor_view);
 
       refresh_plane_assignation (compositor_view);
@@ -1008,6 +1008,7 @@ meta_compositor_view_native_finalize (GObject *object)
   MetaCompositorViewNative *view_native = META_COMPOSITOR_VIEW_NATIVE (object);
 
   g_clear_weak_pointer (&view_native->scanout_candidate);
+  g_clear_pointer      (&view_native->scanout_surface_actor_candidates, g_list_free);
 
   G_OBJECT_CLASS (meta_compositor_view_native_parent_class)->finalize (object);
 }

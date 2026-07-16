@@ -31,7 +31,6 @@ struct _MetaFrameNative
 
   MetaDrmBuffer *buffer;
   CoglScanout *scanout;
-// TODO Watch out for mem-leaks
   GList* scanout_list;
 
   MetaKmsUpdate *kms_update;
@@ -50,7 +49,6 @@ meta_frame_native_release (ClutterFrame *frame)
   g_clear_pointer (&frame_native->damage, mtk_region_unref);
   g_clear_object (&frame_native->buffer);
   g_clear_object (&frame_native->scanout);
-  // TODO is this a right way to delete ?
   g_list_free_full (frame_native->scanout_list, g_object_unref);
 
   g_return_if_fail (!frame_native->kms_update);
@@ -131,9 +129,9 @@ meta_frame_native_get_primary_buffer (MetaFrameNative *frame_native)
 
 void
 meta_frame_native_set_scanout (MetaFrameNative *frame_native,
-                               GList     *scanout_list)
+                               GList           *scanout_list)
 {
-  frame_native->scanout_list = scanout_list;
+  frame_native->scanout_list = g_steal_pointer (&scanout_list);
 }
 
 GList*
