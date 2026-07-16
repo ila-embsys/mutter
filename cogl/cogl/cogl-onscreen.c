@@ -445,7 +445,7 @@ cogl_onscreen_get_buffer_age (CoglOnscreen *onscreen)
 
 gboolean
 cogl_onscreen_direct_scanout (CoglOnscreen   *onscreen,
-                              GList          *scanout_list,
+                              CoglScanout    *scanout,
                               CoglFrameInfo  *info,
                               gpointer        user_data,
                               GError        **error)
@@ -469,7 +469,7 @@ cogl_onscreen_direct_scanout (CoglOnscreen   *onscreen,
   g_queue_push_tail (&priv->pending_frame_infos, info);
 
   if (!klass->direct_scanout (onscreen,
-                              scanout_list,
+                              scanout,
                               info,
                               user_data,
                               error))

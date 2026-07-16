@@ -2440,10 +2440,10 @@ scanout_result_feedback (const MetaKmsFeedback *kms_feedback,
 
   maybe_post_next_frame (onscreen);
 }
-// TODO Change scanout_list to scanout
+// TODO This function is obsolete with the introduction of compose_with_hw_planes
 static gboolean
 meta_onscreen_native_direct_scanout (CoglOnscreen   *onscreen,
-                                     GList          *scanout_list,
+                                     CoglScanout    *scanout,
                                      CoglFrameInfo  *frame_info,
                                      gpointer        user_data,
                                      GError        **error)
@@ -2466,12 +2466,9 @@ meta_onscreen_native_direct_scanout (CoglOnscreen   *onscreen,
 
   assign_next_frame (onscreen_native, frame);
 
-  meta_frame_native_set_scanout (frame_native, scanout_list);
-  // TODO Remove to original code when the argument was changed
-  /*
+  /*meta_frame_native_set_scanout (frame_native, scanout);
   meta_frame_native_set_buffer (frame_native,
-                                META_DRM_BUFFER (cogl_scanout_get_buffer (scanout)));
-  */
+                                META_DRM_BUFFER (cogl_scanout_get_buffer (scanout)));*/
 
   clutter_frame_set_result (frame, CLUTTER_FRAME_RESULT_PENDING_PRESENTED);
 

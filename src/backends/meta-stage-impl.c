@@ -735,11 +735,11 @@ meta_stage_impl_redraw_view_primary (MetaStageImpl    *stage_impl,
                     swap_with_damage,
                     frame);
 }
-// TODO Change scanout_list to scanout
+
 static gboolean
 meta_stage_impl_scanout_view (MetaStageImpl     *stage_impl,
                               ClutterStageView  *stage_view,
-                              GList              *scanout_list,
+                              CoglScanout       *scanout,
                               ClutterFrame      *frame,
                               GError           **error)
 {
@@ -757,9 +757,9 @@ meta_stage_impl_scanout_view (MetaStageImpl     *stage_impl,
 
   frame_info = cogl_frame_info_new (cogl_context, priv->global_frame_counter,
                                     frame->frame_count);
-// TODO Change scanout_list to scanout
+
   if (!cogl_onscreen_direct_scanout (onscreen,
-                                     scanout_list,
+                                     scanout,
                                      frame_info,
                                      frame,
                                      error))
@@ -771,7 +771,7 @@ meta_stage_impl_scanout_view (MetaStageImpl     *stage_impl,
   priv->global_frame_counter++;
   return TRUE;
 }
-// TODO correct for code-review
+
 static void
 primary_paint_phase (MetaStageImpl    *stage_impl,
                      ClutterStageView *stage_view,
