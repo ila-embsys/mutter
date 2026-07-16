@@ -848,13 +848,10 @@ assign_plane_by_id (MetaCrtcKms            *crtc_kms,
 static int
 scanout_plane_compare (gconstpointer a, gconstpointer b)
 {
-  const CoglScanout *current_scanout = a;
-  const CoglScanout *target_scanout  = b;
-  // TODO keep the Constness intact and resolve the warnings
-  if(cogl_scanout_get_plane_id(current_scanout) == cogl_scanout_get_plane_id(target_scanout))
-    return 0;
-  else
-    return -1;
+  const CoglScanout *scanout_a = a;
+  const CoglScanout *scanout_b  = b;
+
+  return cogl_scanout_plane_id_compare (scanout_a, scanout_b);
 }
 
 static gboolean

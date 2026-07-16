@@ -162,6 +162,15 @@ cogl_scanout_set_plane_id (CoglScanout *scanout,
   scanout->plane_id = plane_id;
 }
 
+int
+cogl_scanout_plane_id_compare (const CoglScanout *scanout_a, const CoglScanout *scanout_b)
+{
+  if(scanout_a->plane_id == scanout_b->plane_id)
+    return 0;
+  else
+    return -1;
+}
+
 static void
 cogl_scanout_finalize (GObject *object)
 {

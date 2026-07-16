@@ -98,3 +98,6 @@ uint32_t cogl_scanout_get_plane_id (CoglScanout *scanout);
 COGL_EXPORT
 void cogl_scanout_set_plane_id (CoglScanout *scanout,
                                 uint32_t     plane_id);
+
+COGL_EXPORT
+int cogl_scanout_plane_id_compare (const CoglScanout *scanout_a, const CoglScanout *scanout_b);
