@@ -902,7 +902,7 @@ void clutter_stage_view_remove_scanout_clip (ClutterStageView *view)
   priv->has_scanout_clip = FALSE;
 }
 
-// TODO Review the existing code and resolve any leaks
+// TODO This function is obsolete with the introduction of scanout_list
 void
 clutter_stage_view_assign_next_scanout (ClutterStageView *view,
                                         CoglScanout      *scanout)
@@ -910,10 +910,7 @@ clutter_stage_view_assign_next_scanout (ClutterStageView *view,
   ClutterStageViewPrivate *priv =
     clutter_stage_view_get_instance_private (view);
 
-  priv->scanout_list = g_list_append (priv->scanout_list, scanout);
-  // TODO Check whether this below code, really needed
-  /* ADDED this just not to break things */
-  g_set_object (&priv->next_scanout, priv->scanout_list->data);
+  g_set_object (&priv->next_scanout, scanout);
 }
 
 void clutter_stage_view_assign_scanout (ClutterStageView *stage_view,
