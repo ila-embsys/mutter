@@ -1089,7 +1089,10 @@ on_monitors_changing (MetaMonitorManager *monitor_manager,
 
       if (compositor_view)
         {
-          META_COMPOSITOR_VIEW_GET_CLASS (compositor_view)->invalidate_scanout_candidates (compositor_view);
+          MetaCompositorViewClass *klass = META_COMPOSITOR_VIEW_GET_CLASS (compositor_view);
+
+          if (klass && klass->invalidate_scanout_candidates)
+            klass->invalidate_scanout_candidates (compositor_view);
         }
     }
 }
