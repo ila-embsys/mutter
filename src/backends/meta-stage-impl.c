@@ -735,7 +735,7 @@ meta_stage_impl_redraw_view_primary (MetaStageImpl    *stage_impl,
                     swap_with_damage,
                     frame);
 }
-
+// TODO Change scanout_list to scanout
 static gboolean
 meta_stage_impl_scanout_view (MetaStageImpl     *stage_impl,
                               ClutterStageView  *stage_view,
@@ -743,8 +743,6 @@ meta_stage_impl_scanout_view (MetaStageImpl     *stage_impl,
                               ClutterFrame      *frame,
                               GError           **error)
 {
-  // meta_topic (META_DEBUG_MOHAN, "meta_stage_impl_scanout_view: scanout_list=%p", scanout_list);
-
   MetaStageImplPrivate *priv =
     meta_stage_impl_get_instance_private (stage_impl);
   CoglFramebuffer *framebuffer =
@@ -759,7 +757,7 @@ meta_stage_impl_scanout_view (MetaStageImpl     *stage_impl,
 
   frame_info = cogl_frame_info_new (cogl_context, priv->global_frame_counter,
                                     frame->frame_count);
-
+// TODO Change scanout_list to scanout
   if (!cogl_onscreen_direct_scanout (onscreen,
                                      scanout_list,
                                      frame_info,
@@ -773,15 +771,14 @@ meta_stage_impl_scanout_view (MetaStageImpl     *stage_impl,
   priv->global_frame_counter++;
   return TRUE;
 }
-
+// TODO correct for code-review
 static void
 primary_paint_phase (MetaStageImpl    *stage_impl,
                      ClutterStageView *stage_view,
                      ClutterFrame     *frame,
                      gboolean         *swap_with_damage,
                      gboolean         *swap_with_region,
-                     MtkRegion        **swap_region_out
-                     )
+                     MtkRegion       **swap_region_out)
 {
   ClutterStageWindow *stage_window = CLUTTER_STAGE_WINDOW (stage_impl);
   MetaStageView *view = META_STAGE_VIEW (stage_view);
@@ -1127,77 +1124,10 @@ meta_stage_impl_view (MetaStageImpl    *stage_impl,
 }
 
 static void
-calc_scanout_region (GList* scanout_list,
-                     MtkRegion **scanout_region_out)
-{
-  MtkRegion *scanout_region = mtk_region_create ();
-
-  for (GList *l = scanout_list; l; l = l->next)
-    {
-      CoglScanout *scanout = l->data;
-      MtkRectangle scanout_rect;
-      /*
-      CoglScanoutBuffer* scanout_buffer = cogl_scanout_get_buffer(scanout);
-      if(scanout_buffer)
-      {
-        MetaDrmBuffer* buffer = META_DRM_BUFFER (cogl_scanout_get_buffer(scanout));
-        meta_topic (META_DEBUG_MOHAN, "Scanout buffer while calc region: %u", buffer ? meta_drm_buffer_get_fb_id(buffer) : 0);
-      }*/
-      cogl_scanout_get_dst_rect (scanout, &scanout_rect);
-      mtk_region_union_rectangle (scanout_region, &scanout_rect);
-    }
-  
-  *scanout_region_out = scanout_region;
-}
-
-static void
-probe_region (ClutterStageView *stage_view, GList *scanout_list)
-{
-  MtkRegion *scanout_region = NULL;
-
-  calc_scanout_region (scanout_list, &scanout_region);
-  const MtkRegion *redraw_clip = clutter_stage_view_peek_redraw_clip (stage_view);
-  const MtkRegion *scanout_clip = clutter_stage_view_peek_scanout_clip (stage_view);
-
-  int num_scanout_rects = mtk_region_num_rectangles (scanout_region);
-  int num_redraw_rects = mtk_region_num_rectangles (redraw_clip);
-  int num_scanout_clip = mtk_region_num_rectangles (scanout_clip);
-  int iter;
-
-  meta_topic (META_DEBUG_MOHAN, "***** Probe Scanout & Redraw Region Starts *****");
-  meta_topic (META_DEBUG_MOHAN, "scanout candidates: %d", g_list_length(scanout_list));
-  meta_topic (META_DEBUG_MOHAN, "scanout_region: rects: %d", num_scanout_rects);
-  meta_topic (META_DEBUG_MOHAN, "scanout_clip: rects: %d", num_scanout_clip);
-
-  for(iter = 0; iter < num_scanout_rects; iter++)
-  {
-    MtkRectangle rect = mtk_region_get_rectangle (scanout_region, iter);
-    meta_topic (META_DEBUG_MOHAN, "scanout_rect: %d,%d %dx%d", rect.x, rect.y, rect.width, rect.height);
-  }
-
-  meta_topic (META_DEBUG_MOHAN, "redraw_clip region: rects: %d has_redraw_clip: %d", num_redraw_rects, clutter_stage_view_has_redraw_clip (stage_view));
-  for(iter = 0; iter < num_redraw_rects; iter++)
-  {
-    MtkRectangle rect = mtk_region_get_rectangle (redraw_clip, iter);
-    meta_topic (META_DEBUG_MOHAN, "redraw_rect: %d,%d %dx%d", rect.x, rect.y, rect.width, rect.height);
-  }
-
-  meta_topic (META_DEBUG_MOHAN, "scanout_clip: rects: %d has_scanout_clip: %d", num_scanout_clip, clutter_stage_view_has_scanout_clip (stage_view));
-  for(iter = 0; iter < num_scanout_clip; iter++)
-  {
-    MtkRectangle rect = mtk_region_get_rectangle (scanout_clip, iter);
-    meta_topic (META_DEBUG_MOHAN, "scanout_rect: %d,%d %dx%d", rect.x, rect.y, rect.width, rect.height);
-  }
-
-  meta_topic (META_DEBUG_MOHAN, "***** Probe Scanout & Redraw Region Ends *****");
-}
-
-static void
 meta_stage_impl_redraw_view (ClutterStageWindow *stage_window,
                              ClutterStageView   *stage_view,
                              ClutterFrame       *frame)
 {
-  // meta_topic (META_DEBUG_MOHAN, "meta_stage_impl_redraw_view: stage_view");
   MetaStageImpl *stage_impl = META_STAGE_IMPL (stage_window);
   GList *scanout_list = NULL;
 
@@ -1206,7 +1136,6 @@ meta_stage_impl_redraw_view (ClutterStageWindow *stage_window,
   gboolean enable_primary_refresh = FALSE;
   gboolean enable_scanout = FALSE;
 
-  probe_region (stage_view, scanout_list);
   if (scanout_list)
     {
       enable_scanout = true;

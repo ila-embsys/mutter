@@ -852,12 +852,15 @@ meta_kms_plane_type_to_string (MetaKmsPlaneType plane_type)
   g_assert_not_reached ();
 }
 
-void meta_kms_plane_set_assigned (MetaKmsPlane *plane, gboolean assigned)
+void
+meta_kms_plane_set_assigned (MetaKmsPlane *plane,
+                             gboolean assigned)
 {
   plane->is_assigned = assigned;
 }
 
-gboolean meta_kms_plane_is_assigned (MetaKmsPlane *plane)
+gboolean
+meta_kms_plane_is_assigned (MetaKmsPlane *plane)
 {
   return plane->is_assigned;
 }

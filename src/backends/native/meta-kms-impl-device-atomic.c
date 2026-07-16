@@ -1254,8 +1254,6 @@ meta_kms_impl_device_atomic_process_update (MetaKmsImplDevice *impl_device,
                    "drmModeAtomicCommit: %s", g_strerror (-ret));
       goto err;
     }
-  
-  meta_topic (META_DEBUG_MOHAN_KMS, "Atomic Commit Passed");
   drmModeAtomicFree (req);
 
   process_entries (impl_device,

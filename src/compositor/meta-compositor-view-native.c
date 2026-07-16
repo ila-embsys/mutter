@@ -66,6 +66,7 @@ struct _MetaCompositorViewNative
   MetaCompositorView parent;
 
   MetaWaylandSurface *scanout_candidate;
+  // TODO Watch for mem-leaks ?
   GList* scanout_candidates;
 
   MetaSurfaceActor *fullscreen_actor;
@@ -134,24 +135,8 @@ update_scanout_candidate (MetaCompositorViewNative *view_native,
     if(surface)
       meta_wayland_surface_set_scanout_candidate (surface, crtc);
   }
-  // TODO revisit to correctly ref the candidate_list
+  // TODO revisit to correctly ref the candidate_list & check org code for refer
   view_native->scanout_candidates = scanout_candidates;
-/*
-  if (view_native->scanout_candidate &&
-      view_native->scanout_candidate != surface)
-    {
-      meta_wayland_surface_set_scanout_candidate (view_native->scanout_candidate,
-                                                  NULL);
-      g_clear_weak_pointer (&view_native->scanout_candidate);
-    }
-
-  if (surface)
-    {
-      meta_wayland_surface_set_scanout_candidate (surface, crtc);
-      g_set_weak_pointer (&view_native->scanout_candidate,
-                          surface);
-    }
-*/
 }
 
 static MetaSurfaceActor *
@@ -267,7 +252,7 @@ region_intersects_rect (MtkRegion *region, MtkRectangle *rect)
 {
   return mtk_region_contains_rectangle (region, rect) != MTK_REGION_OVERLAP_OUT;
 }
-
+// TODO Correct it for code-review
 static void
 map_rect_to_device_space (MetaCompositorView *compositor_view,
                                       ClutterActor *clutter_actor,
@@ -287,7 +272,7 @@ map_rect_to_device_space (MetaCompositorView *compositor_view,
     .height = (int) floorf (actor_rect.size.height * device_scale)
   };
 }
-
+// TODO Correct it for code-review
 static void
 map_region_to_device_space (MetaCompositorView *compositor_view,
                                         ClutterActor *clutter_actor,
@@ -364,7 +349,6 @@ has_overlapping_cursor_overlay_foreach (ClutterStage  *stage,
   MetaBackend *backend = meta_compositor_get_backend (data->compositor);
   MetaCursorRenderer *cursor_renderer;
   ClutterCursor *cursor;
-  MtkRectangle view_rect;
   graphene_rect_t graphene_actor_rect;
   graphene_rect_t cursor_rect;
 
@@ -378,11 +362,6 @@ has_overlapping_cursor_overlay_foreach (ClutterStage  *stage,
   cursor = meta_cursor_renderer_get_cursor (cursor_renderer);
   cursor_rect = meta_cursor_renderer_calculate_rect (cursor_renderer,
                                                      cursor);
-
-/*
-  clutter_stage_view_get_layout (data->stage_view, &view_rect);
-  graphene_view_rect = mtk_rectangle_to_graphene_rect (&view_rect);
-*/
 
   clutter_actor_get_transformed_extents (CLUTTER_ACTOR(data->surface_actor), &graphene_actor_rect);
   float device_scale = clutter_stage_view_get_scale (data->stage_view);
@@ -415,7 +394,7 @@ surface_actor_has_overlapping_cursor_overlays (MetaCompositor     *compositor,
 
   return data.has_overlap;
 }
-
+// TODO Maybe remove the underlay candidates before the final draft
 static gboolean
 find_overlay_candidates (MetaCompositorView *compositor_view,
                          MetaCompositor     *compositor,
@@ -484,10 +463,7 @@ find_overlay_candidates (MetaCompositorView *compositor_view,
         surface = meta_surface_actor_wayland_get_surface (surface_actor_wayland);
       }
     else
-      {
-        meta_topic (META_DEBUG_MOHAN, "[Debug] No Scanout Candidate For Window Actor");
-        return FALSE;      
-      }
+      return FALSE;      
   }
 
   gboolean has_surface_actor = surface_actor != NULL;
@@ -527,11 +503,6 @@ find_overlay_candidates (MetaCompositorView *compositor_view,
                                   &device_space_opaque_region);
     }
 
-    /* TODO maybe check whether the associated window has any additional
-       shader effects and exclude if it causes issues on overlay planes */
-
-    // TODO Check the window's children potential candidates for overlay planes
-
     if (has_surface_actor &&
         surface_frequent_updates &&
         has_dmabuf_attribs &&
@@ -547,38 +518,29 @@ find_overlay_candidates (MetaCompositorView *compositor_view,
             gboolean is_opaque = mtk_region_contains_rectangle (device_space_opaque_region, &device_space_actor_rect) == MTK_REGION_OVERLAP_IN;
             if (!is_opaque)
                 return FALSE;
-            meta_topic (META_DEBUG_MOHAN, "Adding Underlay Candidate (%#x): (%dx%d)", clutter_actor, (int) clutter_actor_box_get_width (&actor_bounding_box), (int) clutter_actor_box_get_height (&actor_bounding_box));
+
             *underlay_candidates = g_list_prepend (*underlay_candidates, surface_actor);
           }
-        else {
-          char *format_str = NULL;
-          char *vendor_str = NULL;
-          char *modifier_str = NULL;
-          meta_topic (META_DEBUG_MOHAN, "Adding Overlay Candidate (%#x): (%dx%d)", clutter_actor, (int) clutter_actor_box_get_width (&actor_bounding_box), (int) clutter_actor_box_get_height (&actor_bounding_box));
-          meta_wayland_dma_buf_dump_info (meta_wayland_surface_get_buffer (surface), &format_str, &modifier_str, &vendor_str);
-          meta_topic (META_DEBUG_MOHAN, "Candidate With DMA BUF: format: %s, vendor: %s, modifier: %s", format_str, vendor_str, modifier_str);
-          // meta_wayland_dma_buf_supported_planes (meta_wayland_surface_get_buffer (surface), stage_view);
+        else
           *overlay_candidates = g_list_prepend (*overlay_candidates, surface_actor);
-        }
+
         // TODO Also Check Max Scanout & Underlay Count once underlay is considered
         if (g_list_length (*overlay_candidates) > max_overlay_count)
           {
-            meta_topic (META_DEBUG_MOHAN, "Plane Budget exhausted: Overlay: %d MaxOverlay: %d", g_list_length (*overlay_candidates), max_overlay_count);
+            // TODO Add a Log for plane count has been exhausted
             return FALSE;
           }
       }
-    else {
-//      meta_topic (META_DEBUG_MOHAN, "Adding Candidate (%#x) to Occupied Region: Rect: (%dx%d)", clutter_actor, (int) clutter_actor_box_get_width (&actor_bounding_box), (int) clutter_actor_box_get_height (&actor_bounding_box));
-//      meta_topic (META_DEBUG_MOHAN, "HasSurfaceActor: %d HasDmaBuf: %d IsFullyOpaque: %d notCoveredOpaque: %d", has_surface_actor, has_dmabuf_attribs, is_fully_opaque, notCoveredByOpaque);
+    else
       mtk_region_union_rectangle (occupied_region, &device_space_actor_rect);
-    }
 
-//    meta_topic (META_DEBUG_MOHAN, "Adding Candidate (%#x) to Opaque Region: %d, %d, (%dx%d)", clutter_actor, mtk_region_get_extents(device_space_opaque_region).x, mtk_region_get_extents(device_space_opaque_region).y, mtk_region_get_extents(device_space_opaque_region).width, mtk_region_get_extents(device_space_opaque_region).height );
+  
     mtk_region_union (opaque_region, device_space_opaque_region);
-    
+
+// TODO Revisit whether this reverse is really needed ?
     *overlay_candidates = g_list_reverse (*overlay_candidates);
     *underlay_candidates = g_list_reverse (*underlay_candidates);
-  
+
     GList* children = clutter_actor_get_children (clutter_actor);
 
     for(GList* iter = children; iter != NULL; iter = iter->next)
@@ -670,7 +632,6 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
 {
   ClutterStageView *stage_view =
     meta_compositor_view_get_stage_view (compositor_view);
-  MetaStageView *view = META_STAGE_VIEW (stage_view);
   MetaRendererView *renderer_view = META_RENDERER_VIEW (stage_view);
   MetaCrtc *crtc;
   CoglFramebuffer *framebuffer;
@@ -689,7 +650,7 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
     {
       return FALSE;
     }
-
+// TODO Make sure the Regions are unref
   GList* window_actors = meta_compositor_get_window_actors (compositor);
   MtkRegion* occupied_region = mtk_region_create();
   MtkRegion* opaque_region = mtk_region_create();
@@ -701,8 +662,6 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
   GList* iter = NULL;
   
   probe_plane_budget (compositor_view, &max_scanout_count, &max_overlay_count);
-  meta_topic (META_DEBUG_MOHAN, "***** -- Finding Overlay Candidates for Window Group: %d window actors -- *****", g_list_length (window_actors));
-  meta_topic (META_DEBUG_MOHAN, "Plane Budget: %d scanout planes %d overlay planes", max_scanout_count, max_overlay_count);
   for (iter = g_list_last (window_actors); iter != NULL; iter = iter->prev)
     {
       ClutterActor *clutter_actor = CLUTTER_ACTOR (iter->data);
@@ -714,15 +673,12 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
                                      &overlay_candidates, &underlay_candidates))
         {
           // Fallback to Gfx compositing
-          meta_topic (META_DEBUG_MOHAN, "Falling back to Gfx Compositing");
+          meta_topic (META_DEBUG_RENDER, "Falling back to Gfx Compositing");
           g_list_free (overlay_candidates);
           g_list_free (underlay_candidates);
           return FALSE;
         }
-      // meta_topic (META_DEBUG_MOHAN, "Next Candidate Tree");
     }
-  meta_topic (META_DEBUG_MOHAN, "Overlay Candidates: %d Underlay Candidates: %d", g_list_length (overlay_candidates), g_list_length (underlay_candidates));
-  meta_topic (META_DEBUG_MOHAN, "***** -- Finished Candidate Findings -- *****");
 
   crtc = meta_renderer_view_get_crtc (renderer_view);
   if (!META_IS_CRTC_KMS (crtc))
@@ -806,7 +762,7 @@ static void
 acquire_scanout_for_candidates (MetaCompositorView *compositor_view,
                                 CoglOnscreen       *onscreen,
                                 GList              *overlay_candidates,
-                                GList              **scanout_candidates_out)
+                                GList             **scanout_candidates_out)
 {
   ClutterStageView *stage_view;
   
@@ -898,48 +854,6 @@ build_scanout_config_cache (MetaCompositorView *compositor_view,
   return test_cache_key;
 }
 
-/*
-static void
-skip_candidate_paint (ClutterStageView *view, GList* candidates)
-{
-  GList* iter = NULL;
-  guint num_candidates = g_list_length (candidates);
-
-  for(iter = g_list_last (candidates); iter != NULL; iter = iter->prev)
-    {
-      MetaSurfaceActor* surface_actor = iter->data;
-      MetaWaylandSurface* surface = meta_surface_actor_wayland_get_surface (META_SURFACE_ACTOR_WAYLAND (surface_actor));
-      MetaWindow *window = meta_wayland_surface_get_window (surface);
-      MetaWindowActor *window_actor = meta_window_actor_from_window (window);
-      ClutterActor *clutter_actor = CLUTTER_ACTOR (window_actor);
-
-      if (num_candidates > 1 && num_candidates < 3)
-        {
-          if (!clutter_actor_get_skip_paint (clutter_actor))
-            {
-              MetaShapedTexture *shaped_texture = meta_surface_actor_get_texture (surface_actor);
-              MtkRectangle area = (MtkRectangle) {
-                .x = 0,
-                .y = 0,
-                .width = meta_shaped_texture_get_width (shaped_texture),
-                .height = meta_shaped_texture_get_height (shaped_texture)
-              };
-              meta_shaped_texture_update_area (shaped_texture, &area, &area);
-              meta_surface_actor_set_opaque_region (surface_actor, NULL);
-              clutter_actor_queue_redraw (clutter_actor);
-              //clutter_stage_view_add_redraw_clip (view, NULL);
-              clutter_actor_set_skip_paint (clutter_actor, TRUE);
-            }
-        }
-      else
-        {
-          clutter_actor_set_skip_paint (clutter_actor, FALSE);
-        }
-      break;
-    }
-}
-*/
-
 void
 meta_compositor_view_native_maybe_assign_scanout (MetaCompositorViewNative *view_native,
                                                   MetaCompositor           *compositor)
@@ -960,17 +874,9 @@ meta_compositor_view_native_maybe_assign_scanout (MetaCompositorViewNative *view
 
   if (candidate_found)
     {
+      // TODO Move scanout_candidates with other decl
       GList* scanout_candidates = NULL;
       kms_test_cache = get_kms_test_cache (compositor_view);
-
-/*
-      if (meta_get_debug_paint_flags () & META_DEBUG_PAINT_DISABLE_DIRECT_SCANOUT)
-      {
-        if (g_list_length (overlay_candidates) > 1)
-          skip_candidate_paint (meta_compositor_view_get_stage_view(compositor_view), overlay_candidates);
-        return;
-      }
-*/
 
       refresh_plane_assignation (compositor_view);
       scanout_config_cache = build_scanout_config_cache (compositor_view, overlay_candidates);

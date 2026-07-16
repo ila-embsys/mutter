@@ -84,13 +84,14 @@ typedef struct _ClutterStageViewPrivate
   } shadow;
 
   CoglScanout *next_scanout;
-
+  // WATCH: Memory-leak
   GList *scanout_list;
   gboolean has_redraw_clip;
   MtkRegion *redraw_clip;
   gboolean has_accumulated_redraw_clip;
   MtkRegion *accumulated_redraw_clip;
   gboolean has_scanout_clip;
+  // WATCH: Memory-leak
   MtkRegion *scanout_clip;
 
   float refresh_rate;
@@ -902,26 +903,7 @@ void clutter_stage_view_accumulate_scanout_clip (ClutterStageView *view)
   priv->has_scanout_clip = FALSE;
 }
 
-#if 0
-void
-clutter_stage_view_assign_next_scanout (ClutterStageView *view,
-                                        CoglScanout      *scanout)
-{
-  ClutterStageViewPrivate *priv =
-    clutter_stage_view_get_instance_private (view);
-
-  g_set_object (&priv->next_scanout, scanout);
-}
-
-CoglScanout *
-clutter_stage_view_take_scanout (ClutterStageView *view)
-{
-  ClutterStageViewPrivate *priv =
-    clutter_stage_view_get_instance_private (view);
-
-  return g_steal_pointer (&priv->next_scanout);
-}
-#else
+// TODO Review the existing code and resolve any leaks
 void
 clutter_stage_view_assign_next_scanout (ClutterStageView *view,
                                         CoglScanout      *scanout)
@@ -930,7 +912,7 @@ clutter_stage_view_assign_next_scanout (ClutterStageView *view,
     clutter_stage_view_get_instance_private (view);
 
   priv->scanout_list = g_list_append (priv->scanout_list, scanout);
-
+  // TODO Check whether this below code, really needed
   /* ADDED this just not to break things */
   g_set_object (&priv->next_scanout, priv->scanout_list->data);
 }
@@ -942,9 +924,6 @@ void clutter_stage_view_assign_scanout (ClutterStageView *stage_view,
     clutter_stage_view_get_instance_private (stage_view);
 
   priv->scanout_list = g_steal_pointer (&scanout_list);
-
-  /* ADDED this just not to break things */
-  // g_set_object (&priv->next_scanout, priv->scanout_list ? priv->scanout_list->data : NULL);
 }
 
 GList *
@@ -955,7 +934,6 @@ clutter_stage_view_take_scanout (ClutterStageView *view)
 
   return g_steal_pointer (&priv->scanout_list);
 }
-#endif
 
 /**
  * clutter_stage_view_peek_scanout: (skip)

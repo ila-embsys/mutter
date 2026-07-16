@@ -737,7 +737,7 @@ meta_surface_actor_is_frozen (MetaSurfaceActor *self)
 
 gboolean
 meta_surface_actor_get_frame_time_estimation (MetaSurfaceActor *self,
-                                              gint64 *frametime_out_us)
+                                              gint64           *frametime_out_us)
 {
   MetaSurfaceActorPrivate *priv =
     meta_surface_actor_get_instance_private (self);

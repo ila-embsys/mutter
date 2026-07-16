@@ -52,13 +52,11 @@
 #include "common/meta-cogl-drm-formats.h"
 #include "common/meta-drm-format-helpers.h"
 #include "compositor/meta-multi-texture-format-private.h"
-#include "compositor/meta-window-actor-private.h"
 #include "meta/meta-backend.h"
 #include "wayland/meta-wayland-buffer.h"
 #include "wayland/meta-wayland-private.h"
 #include "wayland/meta-wayland-versions.h"
 #include "wayland/meta-wayland-linux-drm-syncobj.h"
-#include "wayland/meta-wayland-client-private.h"
 
 #ifdef HAVE_NATIVE_BACKEND
 #include "backends/native/meta-drm-buffer-gbm.h"
@@ -260,7 +258,6 @@ meta_wayland_dma_buf_tranche_send (MetaWaylandDmaBufTranche *tranche,
   struct wl_array formats_array;
   unsigned int i;
 
-  // meta_topic(META_DEBUG_MOHAN_WAYLAND, "**** --- Sending DMA-BUF tranche to Client:%p --- ****", resource->client);
   wl_array_init (&target_device_buf);
   device_id_ptr = wl_array_add (&target_device_buf, sizeof (*device_id_ptr));
   *device_id_ptr = tranche->target_device_id;
@@ -268,7 +265,6 @@ meta_wayland_dma_buf_tranche_send (MetaWaylandDmaBufTranche *tranche,
                                                            &target_device_buf);
   wl_array_release (&target_device_buf);
   zwp_linux_dmabuf_feedback_v1_send_tranche_flags (resource, tranche->flags);
-  // meta_topic(META_DEBUG_MOHAN_WAYLAND, "Sent tranche flags 0x%x to Client:%p", tranche->flags, resource->client);
 
   wl_array_init (&formats_array);
   for (i = 0; i < tranche->formats->len; i++)
@@ -278,14 +274,6 @@ meta_wayland_dma_buf_tranche_send (MetaWaylandDmaBufTranche *tranche,
                         MetaWaylandDmaBufFormat,
                         i);
       uint16_t *format_index_ptr;
-      /*
-      const char* format_str = drmGetFormatName(format->drm_format);
-      const char* modifier_str = drmGetFormatModifierName(format->drm_modifier);
-      if(tranche->flags & META_WAYLAND_DMA_BUF_TRANCHE_FLAG_SCANOUT)
-        meta_topic (META_DEBUG_MOHAN_WAYLAND,
-                    "Sending format %s (0x%x) with modifier %s (0x%lx) to tranche_formats for Client",
-                    format_str, format->drm_format, modifier_str, format->drm_modifier);
-      */
       format_index_ptr = wl_array_add (&formats_array,
                                        sizeof (*format_index_ptr));
       *format_index_ptr = format->table_index;
@@ -294,7 +282,6 @@ meta_wayland_dma_buf_tranche_send (MetaWaylandDmaBufTranche *tranche,
   wl_array_release (&formats_array);
 
   zwp_linux_dmabuf_feedback_v1_send_tranche_done (resource);
-  // meta_topic(META_DEBUG_MOHAN_WAYLAND, "**** --- DMA-BUF tranche to Client:%p done --- ****", resource->client);
 }
 
 static void
@@ -322,8 +309,6 @@ meta_wayland_dma_buf_feedback_send (MetaWaylandDmaBufFeedback *feedback,
 {
   struct wl_array main_device_buf;
   dev_t *device_id_ptr;
-
-// meta_topic (META_DEBUG_MOHAN_KMS, "Sending DMA-BUF feedback to Client");
   wl_array_init (&main_device_buf);
   device_id_ptr = wl_array_add (&main_device_buf, sizeof (*device_id_ptr));
   *device_id_ptr = feedback->main_device_id;
@@ -377,29 +362,6 @@ meta_wayland_dma_buf_feedback_copy (MetaWaylandDmaBufFeedback *feedback)
 
   return new_feedback;
 }
-
-#if 0
-static void
-meta_wayland_dma_buf_feedback_add_tranche (MetaWaylandDmaBufFeedback *feedback,
-                                           MetaWaylandDmaBufTranche  *tranche)
-{
-  MetaWaylandDmaBufTranche *current_tranche;
-  if (feedback->tranches)
-  {
-    current_tranche = feedback->tranches->data;
-    meta_topic(META_DEBUG_MOHAN_WAYLAND, "[tranche] Current Tranche: flag: 0x%x, priority: %d, num_formats: %d",
-               current_tranche->flags, current_tranche->priority, current_tranche->formats->len);
-  }
-  meta_topic(META_DEBUG_MOHAN_WAYLAND, "[tranche] New Tranche: flag: 0x%x, priority: %d, num_formats: %d",
-             tranche->flags, tranche->priority, tranche->formats->len);
-  feedback->tranches = g_list_insert_sorted (feedback->tranches, tranche,
-                                             compare_tranches);
-  current_tranche = feedback->tranches->data;
-  meta_topic(META_DEBUG_MOHAN_WAYLAND, "[tranche] Top Tranche: flag: 0x%x, priority: %d, num_formats: %d",
-             current_tranche->flags, current_tranche->priority, current_tranche->formats->len);
-  meta_topic(META_DEBUG_MOHAN_WAYLAND, "Total number of tranches in feedback: %d", g_list_length (feedback->tranches));
-}
-#endif
 
 static gboolean
 meta_wayland_dma_buf_realize_texture (MetaWaylandBuffer  *buffer,
@@ -667,7 +629,8 @@ has_modifier (GArray   *modifiers,
 }
 
 #ifdef HAVE_NATIVE_BACKEND
-static MetaKmsPlane* crtc_get_overlay_plane (MetaCrtcKms *crtc_kms)
+static MetaKmsPlane*
+crtc_get_overlay_plane (MetaCrtcKms *crtc_kms)
 {
   MetaKmsCrtc *kms_crtc = meta_crtc_kms_get_kms_crtc (crtc_kms);
   GList* planes = meta_kms_device_get_planes (meta_kms_crtc_get_device (kms_crtc));
@@ -703,15 +666,6 @@ crtc_supports_modifier (MetaCrtcKms *crtc_kms,
   if (!crtc_modifiers)
     return FALSE;
 
-  const char* format_str = drmGetFormatName(drm_format);
-  const char* modifier_str = drmGetFormatModifierName(drm_modifier);
-  meta_topic (META_DEBUG_MOHAN, "[KMS] crtc looking for format: %s modifier: %s", format_str, modifier_str);
-  for (guint i = 0; i < crtc_modifiers->len; i++)
-    {
-      uint64_t modifier_elem = g_array_index (crtc_modifiers, uint64_t, i);
-      const char* modifier_elem_str = drmGetFormatModifierName(modifier_elem);
-      meta_topic (META_DEBUG_MOHAN, "[KMS] crtc supports modifiers format: %s modifier: %s", format_str, modifier_elem_str);
-    }
   return has_modifier (crtc_modifiers, drm_modifier);
 }
 #endif
@@ -770,7 +724,6 @@ meta_wayland_dma_buf_try_acquire_scanout (MetaWaylandBuffer     *buffer,
     }
   else
     {
-      meta_topic (META_DEBUG_MOHAN_WAYLAND, "Scanout Acquiring failed: for Client:%p", buffer->resource->client);
       meta_topic (META_DEBUG_RENDER,
                   "DRM format 0x%x (0x%lx) not supported by primary plane",
                   dma_buf->drm_format,
@@ -820,120 +773,11 @@ meta_wayland_dma_buf_try_acquire_scanout (MetaWaylandBuffer     *buffer,
   scanout = cogl_scanout_new (COGL_SCANOUT_BUFFER (g_steal_pointer (&fb)),
                               dst_rect);
   cogl_scanout_set_src_rect (scanout, src_rect);
-
-  /*
-  if (!meta_onscreen_native_is_buffer_scanout_compatible (onscreen, scanout))
-    {
-      meta_topic (META_DEBUG_RENDER,
-                  "Buffer not scanout compatible (see also KMS debug topic)");
-      return NULL;
-    }
-  */
  
   return g_steal_pointer (&scanout);
 #else
   return NULL;
 #endif
-}
-
-void meta_wayland_dma_buf_dump_info (MetaWaylandBuffer *buffer, char **format_str, char **modifier_str, char **vendor_str)
-{
-  if (!buffer)
-    return;
-
-  MetaWaylandDmaBufBuffer *dma_buf = meta_wayland_dma_buf_from_buffer (buffer);
-
-  if (!dma_buf)
-    {
-      meta_topic (META_DEBUG_MOHAN, "No dma-buf to dump info");
-      return;
-    }
-  
-  *format_str = drmGetFormatName(dma_buf->drm_format);
-  *modifier_str = drmGetFormatModifierName(dma_buf->drm_modifier);
-  *vendor_str = drmGetFormatModifierVendor(dma_buf->drm_modifier);
-}
-
-void meta_wayland_dma_buf_supported_planes (MetaWaylandBuffer *buffer,
-                                            ClutterStageView  *stage_view)
-{
-  MetaRendererView *renderer_view = META_RENDERER_VIEW (stage_view);
-  MetaCrtc *crtc = meta_renderer_view_get_crtc (renderer_view);
-  MetaCrtcKms *crtc_kms = META_CRTC_KMS (crtc);
-  MetaKmsCrtc *kms_crtc = meta_crtc_kms_get_kms_crtc (crtc_kms);
-  MetaWaylandDmaBufBuffer *dma_buf = meta_wayland_dma_buf_from_buffer (buffer);
-
-  if(!dma_buf)
-  {
-    meta_topic(META_DEBUG_MOHAN,
-               "[KMS] No dma-buf associated with wl_buffer@%u", buffer);
-    return;
-  }
-
-  meta_topic(META_DEBUG_MOHAN,
-               "[KMS] Checking supported planes for wl_buffer buf: %p dma_buf: %p", buffer, dma_buf);
-  uint32_t drm_format = dma_buf->drm_format;
-  uint64_t drm_modifier = dma_buf->drm_modifier;
-  GList* planes = meta_kms_device_get_planes (meta_kms_crtc_get_device (kms_crtc));
-  GList* iter;
-  for(iter = planes; iter; iter = iter->next)
-  {
-    MetaKmsPlane* plane = iter->data;
-    uint32_t plane_id = meta_kms_plane_get_id(plane);
-    const char* plane_str = meta_kms_plane_type_to_string (meta_kms_plane_get_plane_type(plane));
-    const char* format_str = drmGetFormatName(dma_buf->drm_format);
-    const char* modifier_str = drmGetFormatModifierName(dma_buf->drm_modifier);
-    const char* vendor_str = drmGetFormatModifierVendor(dma_buf->drm_modifier);
-    GArray* crtc_modifiers = meta_kms_plane_get_modifiers_for_format(plane, drm_format);
-
-    if(meta_kms_plane_is_format_supported(plane, dma_buf->drm_format))
-    {
-      meta_topic(META_DEBUG_MOHAN,
-                 "[KMS] %s Plane %d  supports format %s (0x%x)",
-                  plane_str, plane_id,
-                  format_str,
-                  dma_buf->drm_format);
-    } else {
-      meta_topic(META_DEBUG_MOHAN,
-                 "[KMS] %s Plane %d does not support format %s (0x%x)",
-                  plane_str, plane_id,
-                  format_str,
-                  dma_buf->drm_format);
-    }
-
-    if(drm_modifier == DRM_FORMAT_MOD_INVALID)
-    {
-      meta_topic(META_DEBUG_MOHAN,
-                 "[KMS] No modifier specified, skipping modifier support check for %s Plane %d",
-                  plane_str, plane_id);
-      continue;
-    }
-
-    if (!crtc_modifiers)
-    {
-      meta_topic(META_DEBUG_MOHAN,
-                 "[KMS] %s Plane %d does not support any modifiers for format %s (0x%x)",
-                  plane_str, plane_id,
-                  format_str,
-                  dma_buf->drm_format);
-      continue;
-    }
-
-    if( has_modifier(crtc_modifiers, drm_modifier) )
-      meta_topic(META_DEBUG_MOHAN,
-                 "[KMS] %s Plane %d supports modifier Vendor= %s, Modifier= %s (0x%lx)",
-                  plane_str, plane_id,
-                  vendor_str,
-                  modifier_str,
-                  drm_modifier);
-    else
-      meta_topic(META_DEBUG_MOHAN_KMS,
-                 "[KMS] %s Plane %d does not support modifier Vendor= %s, Modifier= %s (0x%lx)",
-                  plane_str, plane_id,
-                  vendor_str,
-                  modifier_str,
-                  drm_modifier);
-  }
 }
 
 static void
