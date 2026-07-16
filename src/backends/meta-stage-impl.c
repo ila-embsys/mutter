@@ -1103,7 +1103,7 @@ meta_stage_impl_view (MetaStageImpl    *stage_impl,
         priv->global_frame_counter++;
 
         if (clutter_stage_view_has_scanout_clip (stage_view))
-          clutter_stage_view_accumulate_scanout_clip (stage_view);
+          clutter_stage_view_remove_scanout_clip (stage_view);
      }
     else
      {

@@ -892,7 +892,7 @@ clutter_stage_view_has_scanout_clip (ClutterStageView *view)
   return priv->has_scanout_clip;
 }
 
-void clutter_stage_view_accumulate_scanout_clip (ClutterStageView *view)
+void clutter_stage_view_remove_scanout_clip (ClutterStageView *view)
 {
   ClutterStageViewPrivate *priv =
     clutter_stage_view_get_instance_private (view);
