@@ -56,6 +56,13 @@ typedef struct _MetaSurfaceActorPrivate
   /* Freeze/thaw accounting */
   MtkRegion *pending_damage;
   gboolean is_frozen;
+
+  /* Frame Time Calculation */
+  GTimeSpan last_damage_time_diffs[100];
+  guint diffs_head;
+  guint diffs_length;
+  gint64  accumulated_time_diffs_us;
+  gint64  last_damage_us;
 } MetaSurfaceActorPrivate;
 
 #define BACKGROUND_EFFECT_BLUR_RADIUS 24.0f
@@ -312,6 +319,11 @@ meta_surface_actor_constructed (GObject *object)
                              CLUTTER_CONTENT (priv->content));
   clutter_actor_set_request_mode (CLUTTER_ACTOR (surface_actor),
                                   CLUTTER_REQUEST_CONTENT_SIZE);
+  
+  priv->diffs_head = 0;
+  priv->diffs_length = 0;
+  priv->accumulated_time_diffs_us = 0;
+  priv->last_damage_us = 0;
 
   G_OBJECT_CLASS (meta_surface_actor_parent_class)->constructed (object);
 }
@@ -519,9 +531,31 @@ void
 meta_surface_actor_update_area (MetaSurfaceActor   *self,
                                 const MtkRectangle *area)
 {
+  MetaSurfaceActorPrivate *priv =
+    meta_surface_actor_get_instance_private (self);
+
   MetaShapedTexture *texture = meta_surface_actor_get_texture (self);
   gboolean repaint_scheduled = FALSE;
   MtkRectangle clip;
+  gint64 time_now_us = g_get_monotonic_time();
+  if (priv->last_damage_us > 0)
+    {
+      gint64 diff_us = time_now_us - priv->last_damage_us;
+      if (priv->diffs_length == 100)
+        {
+          priv->accumulated_time_diffs_us -= priv->last_damage_time_diffs[priv->diffs_head];
+          priv->last_damage_time_diffs[priv->diffs_head] = diff_us;
+          priv->diffs_head = (priv->diffs_head + 1) % 100;
+        }
+      else
+        {
+          guint tail = (priv->diffs_head + priv->diffs_length) % 100;
+          priv->last_damage_time_diffs[tail] = diff_us;
+          priv->diffs_length++;
+        }
+      priv->accumulated_time_diffs_us += diff_us;
+    }
+  priv->last_damage_us = time_now_us;
 
   if (meta_shaped_texture_update_area (texture, area, &clip))
     {
@@ -831,4 +865,21 @@ meta_surface_actor_is_frozen (MetaSurfaceActor *self)
     meta_surface_actor_get_instance_private (self);
 
   return priv->is_frozen;
+}
+
+gboolean
+meta_surface_actor_get_frame_time_estimation (MetaSurfaceActor *self,
+                                              gint64           *frametime_out_us)
+{
+  MetaSurfaceActorPrivate *priv =
+    meta_surface_actor_get_instance_private (self);
+
+  if (priv->diffs_length == 0)
+    return FALSE;
+
+  if ((g_get_monotonic_time () - priv->last_damage_us) > 100 * G_TIME_SPAN_MILLISECOND)
+    return FALSE;
+
+  *frametime_out_us = priv->accumulated_time_diffs_us / priv->diffs_length;
+  return TRUE;
 }
