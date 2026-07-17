@@ -479,7 +479,7 @@ should_use_clipped_redraw (gboolean              is_full_redraw,
   return is_warmed_up && can_use_clipped_redraw;
 }
 
-static void
+static void __attribute__((unused))
 meta_stage_impl_redraw_view_primary (MetaStageImpl    *stage_impl,
                                      ClutterStageView *stage_view,
                                      ClutterFrame     *frame)
@@ -736,7 +736,7 @@ meta_stage_impl_redraw_view_primary (MetaStageImpl    *stage_impl,
                     frame);
 }
 
-static gboolean
+static gboolean __attribute__((unused))
 meta_stage_impl_scanout_view (MetaStageImpl     *stage_impl,
                               ClutterStageView  *stage_view,
                               CoglScanout       *scanout,

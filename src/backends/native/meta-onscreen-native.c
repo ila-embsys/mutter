@@ -2454,7 +2454,7 @@ meta_onscreen_native_direct_scanout (CoglOnscreen   *onscreen,
   MetaRendererNativeGpuData *renderer_gpu_data = cogl_renderer_egl->platform;
   MetaRendererNative *renderer_native = renderer_gpu_data->renderer_native;
   ClutterFrame *frame = user_data;
-  MetaFrameNative *frame_native = meta_frame_native_from_frame (frame);
+  // MetaFrameNative *frame_native = meta_frame_native_from_frame (frame);
 
   renderer_gpu_data = meta_renderer_native_get_gpu_data (renderer_native,
                                                          render_gpu);

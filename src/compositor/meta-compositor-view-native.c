@@ -535,7 +535,7 @@ find_overlay_candidates (MetaCompositorView *compositor_view,
   
     mtk_region_union (opaque_region, device_space_opaque_region);
 
-// TODO Revisit whether this reverse is really needed ?
+
     *overlay_candidates = g_list_reverse (*overlay_candidates);
     *underlay_candidates = g_list_reverse (*underlay_candidates);
 
@@ -710,7 +710,7 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
   return *overlay_candidates_out != NULL;
 }
 
-static void
+static void __attribute__((unused))
 try_assign_next_scanout (MetaCompositorView *compositor_view,
                          CoglOnscreen       *onscreen,
                          MetaWaylandSurface *surface)
