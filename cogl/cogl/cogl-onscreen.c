@@ -210,6 +210,66 @@ cogl_onscreen_swap_region (CoglOnscreen    *onscreen,
   priv->frame_counter++;
 }
 
+gboolean
+cogl_onscreen_compose_with_hw_plane (CoglOnscreen   *onscreen,
+                                     const MtkRegion *region,
+                                     GList           *scanout_list,
+                                     CoglFrameInfo   *info,
+                                     gboolean         use_swap_region,
+                                     gboolean         use_swap_damage,
+                                     gpointer         user_data,
+                                     GError         **error)
+{
+  CoglOnscreenPrivate *priv = cogl_onscreen_get_instance_private (onscreen);
+  CoglFramebuffer *framebuffer = COGL_FRAMEBUFFER (onscreen);
+  CoglOnscreenClass *klass = COGL_ONSCREEN_GET_CLASS (onscreen);
+
+  if (!COGL_IS_ONSCREEN (framebuffer))
+    return FALSE;
+
+  info->frame_counter = priv->frame_counter;
+  g_queue_push_tail (&priv->pending_frame_infos, info);
+
+  if ( use_swap_damage || use_swap_region )
+    {
+      _cogl_framebuffer_flush_journal (framebuffer);
+      cogl_framebuffer_discard_buffers (framebuffer,
+                                        COGL_BUFFER_BIT_DEPTH |
+                                        COGL_BUFFER_BIT_STENCIL);
+    }
+
+  if (use_swap_region)
+    {
+      if(!klass->swap_region)
+        return FALSE;
+    }
+
+  if (!klass->compose_with_hw_plane (onscreen,
+                                     region,
+                                     scanout_list,
+                                     info,
+                                     use_swap_region,
+                                     use_swap_damage,
+                                     user_data,
+                                     error))
+    {
+      g_queue_pop_tail (&priv->pending_frame_infos);
+      return FALSE;
+    }
+
+  if (scanout_list)
+    info->flags |= COGL_FRAME_INFO_FLAG_ZERO_COPY;
+
+  if ( use_swap_damage || use_swap_region )
+    {
+      if (G_UNLIKELY (COGL_DEBUG_ENABLED (COGL_DEBUG_SYNC_FRAME)))
+        cogl_framebuffer_finish (framebuffer);
+    }
+
+  priv->frame_counter++;
+  return TRUE;
+}
+
 int
 cogl_onscreen_get_buffer_age (CoglOnscreen *onscreen)
 {
