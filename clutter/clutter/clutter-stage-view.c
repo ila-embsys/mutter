@@ -89,6 +89,8 @@ typedef struct _ClutterStageViewPrivate
   MtkRegion *redraw_clip;
   gboolean has_accumulated_redraw_clip;
   MtkRegion *accumulated_redraw_clip;
+  gboolean has_scanout_clip;
+  MtkRegion *scanout_clip;
 
   float refresh_rate;
   int64_t vblank_duration_us;
@@ -841,6 +843,57 @@ clutter_stage_view_accumulate_redraw_clip (ClutterStageView *view)
 }
 
 void
+clutter_stage_view_add_scanout_clip (ClutterStageView   *view,
+                                     const MtkRectangle *clip)
+{
+  ClutterStageViewPrivate *priv =
+    clutter_stage_view_get_instance_private (view);
+
+  if (clip->width == 0 || clip->height == 0)
+    return;
+
+  if (!priv->scanout_clip)
+    {
+      priv->scanout_clip = mtk_region_create_rectangle (clip);
+    }
+  else
+    {
+      mtk_region_union_rectangle (priv->scanout_clip, clip);
+    }
+
+  priv->has_scanout_clip = TRUE;
+}
+
+const MtkRegion *
+clutter_stage_view_peek_scanout_clip (ClutterStageView *view)
+{
+  ClutterStageViewPrivate *priv =
+    clutter_stage_view_get_instance_private (view);
+
+  return priv->scanout_clip;
+}
+
+gboolean
+clutter_stage_view_has_scanout_clip (ClutterStageView *view)
+{
+  ClutterStageViewPrivate *priv =
+    clutter_stage_view_get_instance_private (view);
+
+  return priv->has_scanout_clip;
+}
+
+void clutter_stage_view_remove_scanout_clip (ClutterStageView *view)
+{
+  ClutterStageViewPrivate *priv =
+    clutter_stage_view_get_instance_private (view);
+
+  g_return_if_fail(priv->has_scanout_clip);
+
+  g_clear_pointer (&priv->scanout_clip, mtk_region_unref);
+  priv->has_scanout_clip = FALSE;
+}
+
+void
 clutter_stage_view_assign_next_scanout (ClutterStageView *view,
                                         CoglScanout      *scanout)
 {
@@ -1323,6 +1376,7 @@ clutter_stage_view_dispose (GObject *object)
   g_clear_object (&priv->output_color_state);
   g_clear_pointer (&priv->redraw_clip, mtk_region_unref);
   g_clear_pointer (&priv->accumulated_redraw_clip, mtk_region_unref);
+  g_clear_pointer (&priv->scanout_clip, mtk_region_unref);
   g_clear_pointer (&priv->frame_clock, clutter_frame_clock_destroy);
   g_clear_handle_id (&priv->ensure_offscreen_idle_id, g_source_remove);
 
