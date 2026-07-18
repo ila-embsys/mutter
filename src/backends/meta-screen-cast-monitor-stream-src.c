@@ -581,7 +581,7 @@ meta_screen_cast_monitor_stream_src_record_to_buffer (MetaScreenCastStreamSrc   
   MetaMonitor *monitor;
   MetaLogicalMonitor *logical_monitor;
   float scale;
-  ClutterPaintFlag paint_flags = CLUTTER_PAINT_FLAG_CLEAR;
+  ClutterPaintFlag paint_flags = CLUTTER_PAINT_FLAG_CLEAR | CLUTTER_PAINT_FLAG_FORCE_SCANOUT;
   ClutterColorState *color_state;
 
   monitor = get_monitor (monitor_src);
@@ -813,7 +813,7 @@ stage_paint:
     {
       MetaContext *context = meta_backend_get_context (backend);
       MetaDebugControl *debug_control = meta_context_get_debug_control (context);
-      ClutterPaintFlag paint_flags = CLUTTER_PAINT_FLAG_CLEAR;
+      ClutterPaintFlag paint_flags = CLUTTER_PAINT_FLAG_CLEAR | CLUTTER_PAINT_FLAG_FORCE_SCANOUT;
       ClutterColorState *blending_color_state;
       gboolean force_linear;
 
