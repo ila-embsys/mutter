@@ -105,6 +105,7 @@ typedef struct _MetaCompositorPrivate
   gulong before_paint_handler_id;
   gulong after_paint_handler_id;
   gulong window_visibility_updated_id;
+  gulong monitors_changing_internal_id;
   gulong monitors_changed_internal_id;
 
 
@@ -1091,6 +1092,34 @@ on_window_visibility_updated (MetaDisplay    *display,
 }
 
 static void
+on_monitors_changing (MetaMonitorManager *monitor_manager,
+                      MetaCompositor     *compositor)
+{
+  MetaCompositorPrivate *priv =
+    meta_compositor_get_instance_private (compositor);
+  ClutterStage *stage =
+    CLUTTER_STAGE (meta_backend_get_stage (priv->backend));
+  GList *l;
+
+  for (l = clutter_stage_peek_stage_views (stage); l; l = l->next)
+    {
+      ClutterStageView *stage_view = l->data;
+      MetaCompositorView *compositor_view;
+
+      compositor_view = g_object_get_qdata (G_OBJECT (stage_view),
+                                            quark_compositor_view);
+
+      if (compositor_view)
+        {
+          MetaCompositorViewClass *klass = META_COMPOSITOR_VIEW_GET_CLASS (compositor_view);
+
+          if (klass && klass->invalidate_scanout_candidates)
+            klass->invalidate_scanout_candidates (compositor_view);
+        }
+    }
+}
+
+static void
 on_monitors_changed_internal (MetaMonitorManager *monitor_manager,
                               MetaCompositor     *compositor)
 {
@@ -1234,6 +1263,12 @@ meta_compositor_constructed (GObject *object)
     g_signal_connect (priv->display,
                       "window-visibility-updated",
                       G_CALLBACK (on_window_visibility_updated),
+                      compositor);
+
+  priv->monitors_changing_internal_id =
+    g_signal_connect (monitor_manager,
+                      "monitors-changing",
+                      G_CALLBACK (on_monitors_changing),
                       compositor);
 
   priv->monitors_changed_internal_id =

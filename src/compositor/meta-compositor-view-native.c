@@ -966,6 +966,14 @@ meta_compositor_view_native_maybe_update_fullscreen_actor (MetaCompositorViewNat
   update_fullscreen_actor (view_native, fullscreen_actor);
 }
 
+static void
+meta_compositor_view_native_invalidate_scanout_candidates (MetaCompositorView *view)
+{
+  MetaCompositorViewNative *view_native = META_COMPOSITOR_VIEW_NATIVE (view);
+
+  update_scanout_candidate (view_native, NULL, NULL);
+}
+
 MetaCompositorViewNative *
 meta_compositor_view_native_new (ClutterStageView *stage_view)
 {
@@ -1007,9 +1015,11 @@ static void
 meta_compositor_view_native_class_init (MetaCompositorViewNativeClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
+  MetaCompositorViewClass *view_class = META_COMPOSITOR_VIEW_CLASS (klass);
 
   object_class->dispose = meta_compositor_view_native_dispose;
   object_class->finalize = meta_compositor_view_native_finalize;
+  view_class->invalidate_scanout_candidates = meta_compositor_view_native_invalidate_scanout_candidates;
 }
 
 static void
