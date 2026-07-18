@@ -79,6 +79,7 @@ static const GDebugKey meta_paint_debug_keys[] = {
   { "sync-cursor-primary", META_DEBUG_PAINT_SYNC_CURSOR_PRIMARY },
   { "disable-direct-scanout", META_DEBUG_PAINT_DISABLE_DIRECT_SCANOUT },
   { "ignore-color-state-for-direct-scanout", META_DEBUG_PAINT_IGNORE_COLOR_STATE_FOR_DIRECT_SCANOUT },
+  { "disable-scanout-cache", META_DEBUG_PAINT_DISABLE_SCANOUT_CACHE }, // TODO Remove this Before Raising MR
 };
 
 typedef struct _MetaReadBytesContext

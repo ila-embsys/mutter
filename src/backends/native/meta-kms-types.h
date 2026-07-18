@@ -41,6 +41,8 @@ typedef struct _MetaKmsImplDevice MetaKmsImplDevice;
 
 typedef struct _MetaKmsCursorManager MetaKmsCursorManager;
 
+typedef struct _MetaKmsTestCache MetaKmsTestCache;
+
 /* 16:16 fixed point */
 typedef int32_t MetaFixed16;
 
