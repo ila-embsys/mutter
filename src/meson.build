@@ -769,6 +769,8 @@ if have_native_backend
     'backends/native/meta-kms-plane.c',
     'backends/native/meta-kms-plane-private.h',
     'backends/native/meta-kms-plane.h',
+    'backends/native/meta-kms-test-cache.c',
+    'backends/native/meta-kms-test-cache.h',
     'backends/native/meta-kms-private.h',
     'backends/native/meta-kms-types-private.h',
     'backends/native/meta-kms-types.h',

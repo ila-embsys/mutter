@@ -60,6 +60,8 @@ GList * meta_kms_device_get_crtcs (MetaKmsDevice *device);
 META_EXPORT_TEST
 GList * meta_kms_device_get_planes (MetaKmsDevice *device);
 
+MetaKmsTestCache * meta_kms_device_get_test_cache (MetaKmsDevice *device);
+
 gboolean meta_kms_device_has_cursor_plane_for (MetaKmsDevice*device,
                                                MetaKmsCrtc  *crtc);
 

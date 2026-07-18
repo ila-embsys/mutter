@@ -133,6 +133,8 @@ const char * meta_kms_impl_device_get_driver_description (MetaKmsImplDevice *imp
 
 const char * meta_kms_impl_device_get_path (MetaKmsImplDevice *impl_device);
 
+MetaKmsTestCache * meta_kms_impl_device_get_test_cache (MetaKmsImplDevice *impl_device);
+
 gboolean meta_kms_impl_device_lease_objects (MetaKmsImplDevice  *impl_device,
                                              GList              *connectors,
                                              GList              *crtcs,
