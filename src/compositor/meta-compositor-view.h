@@ -27,14 +27,16 @@
 #include "clutter/clutter-mutter.h"
 #include "meta/meta-window-actor.h"
 
-struct _MetaCompositorViewClass
-{
-  GObjectClass parent_class;
-};
-
 #define META_TYPE_COMPOSITOR_VIEW (meta_compositor_view_get_type ())
 G_DECLARE_DERIVABLE_TYPE (MetaCompositorView, meta_compositor_view,
                           META, COMPOSITOR_VIEW, GObject)
+
+struct _MetaCompositorViewClass
+{
+  GObjectClass parent_class;
+
+  void (*invalidate_scanout_candidates) (MetaCompositorView  *compositor_view);
+};
 
 MetaCompositorView *meta_compositor_view_new (ClutterStageView *stage_view);
 
