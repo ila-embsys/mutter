@@ -690,6 +690,29 @@ meta_scanout_manager_assign_planes (MetaScanoutManager       *scanout_manager,
   plane_assignment_clear (&standin);
 }
 
+void
+meta_scanout_manager_invalidate_offloaded (MetaScanoutManager *scanout_manager)
+{
+  g_autoptr (ScanoutAssignment) old_assignment = NULL;
+
+  old_assignment = g_steal_pointer (&scanout_manager->previous_assignment);
+
+  PlaneAssignment *old_primary = scanout_assignment_get_primary (old_assignment);
+  if (old_primary->surface)
+    {
+      disable_scanout_candidate (CLUTTER_ACTOR(old_primary->surface_actor));
+    }
+
+  size_t n_overlays = scanout_assignment_get_n_overlays (old_assignment);
+  for (size_t i = 0; i < n_overlays; i++)
+    {
+      PlaneAssignment *old_overlay = scanout_assignment_get_overlay (old_assignment, i);
+      ClutterActor* clutter_actor = CLUTTER_ACTOR (old_overlay->surface_actor);
+
+      disable_scanout_candidate (clutter_actor);
+    }
+}
+
 MetaScanoutManager *
 meta_scanout_manager_new (ClutterStageView *stage_view)
 {

@@ -35,3 +35,5 @@ void meta_scanout_manager_assign_planes (MetaScanoutManager       *scanout_manag
                                          ClutterOffloadableActors *offload_actors,
                                          MetaCompositor           *compositor,
                                          ClutterFrame             *frame);
+
+void meta_scanout_manager_invalidate_offloaded (MetaScanoutManager    *scanout_manager);

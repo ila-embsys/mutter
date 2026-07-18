@@ -213,6 +213,14 @@ on_stage_view_destroy (ClutterStageView         *stage_view,
   view_native->stage_view_destroy_handler_id = 0;
 }
 
+static void
+meta_compositor_view_native_invalidate_scanout_candidates (MetaCompositorView *view)
+{
+  MetaCompositorViewNative *view_native = META_COMPOSITOR_VIEW_NATIVE (view);
+
+  meta_scanout_manager_invalidate_offloaded (view_native->scanout_manager);
+}
+
 MetaCompositorViewNative *
 meta_compositor_view_native_new (ClutterStageView *stage_view)
 {
@@ -253,8 +261,10 @@ static void
 meta_compositor_view_native_class_init (MetaCompositorViewNativeClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
+  MetaCompositorViewClass *view_class = META_COMPOSITOR_VIEW_CLASS (klass);
 
   object_class->dispose = meta_compositor_view_native_dispose;
+  view_class->invalidate_scanout_candidates = meta_compositor_view_native_invalidate_scanout_candidates;
 }
 
 static void
