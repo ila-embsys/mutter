@@ -491,7 +491,7 @@ meta_stream_source_area_record_to_framebuffer (MetaStreamSource      *source,
   MetaStreamArea *area_stream = META_STREAM_AREA (stream);
   MtkRectangle area;
   float scale;
-  ClutterPaintFlag paint_flags = CLUTTER_PAINT_FLAG_NONE;
+  ClutterPaintFlag paint_flags = CLUTTER_PAINT_FLAG_FORCE_SCANOUT;
 
   meta_stream_area_get_area (area_stream, &area);
   scale = meta_stream_area_get_scale (area_stream);

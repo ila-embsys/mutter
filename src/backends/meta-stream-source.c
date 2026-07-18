@@ -555,7 +555,7 @@ meta_stream_source_paint_to_buffer (MetaStreamSource   *source,
   MtkRectangle extents;
   int bpp;
 
-  paint_flags = CLUTTER_PAINT_FLAG_NONE;
+  paint_flags = CLUTTER_PAINT_FLAG_FORCE_SCANOUT;
   switch (meta_stream_get_cursor_mode (stream))
     {
     case META_STREAM_CURSOR_MODE_METADATA:
