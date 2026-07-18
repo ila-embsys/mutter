@@ -14913,13 +14913,14 @@ add_actor_to_redraw_clip (ClutterActor       *self,
 {
   ClutterActorPrivate *priv = self->priv;
   ClutterStage *stage = CLUTTER_STAGE (_clutter_actor_get_stage_internal (self));
+  gboolean track_for_scanout = priv->skip_paint;
 
   if (priv->next_redraw_clips->len != 0)
     {
       unsigned int i;
 
       for (i = 0; i < priv->next_redraw_clips->len; i++)
-        clutter_stage_add_to_redraw_clip (stage, &g_array_index (priv->next_redraw_clips, ClutterPaintVolume, i));
+        clutter_stage_add_to_redraw_clip (stage, &g_array_index (priv->next_redraw_clips, ClutterPaintVolume, i), track_for_scanout);
 
       priv->next_redraw_clips->len = 0;
     }
@@ -14931,21 +14932,21 @@ add_actor_to_redraw_clip (ClutterActor       *self,
       if (old_visible_paint_volume == NULL || !priv->visible_paint_volume_valid)
         goto full_stage_redraw;
 
-      clutter_stage_add_to_redraw_clip (stage, old_visible_paint_volume);
-      clutter_stage_add_to_redraw_clip (stage, &priv->visible_paint_volume);
+      clutter_stage_add_to_redraw_clip (stage, old_visible_paint_volume, track_for_scanout);
+      clutter_stage_add_to_redraw_clip (stage, &priv->visible_paint_volume, track_for_scanout);
     }
   else
     {
       if (!priv->visible_paint_volume_valid)
         goto full_stage_redraw;
 
-      clutter_stage_add_to_redraw_clip (stage, &priv->visible_paint_volume);
+      clutter_stage_add_to_redraw_clip (stage, &priv->visible_paint_volume, track_for_scanout);
     }
 
   return;
 
 full_stage_redraw:
-  clutter_stage_add_to_redraw_clip (stage, NULL);
+  clutter_stage_add_to_redraw_clip (stage, NULL, false);
 }
 
 static gboolean

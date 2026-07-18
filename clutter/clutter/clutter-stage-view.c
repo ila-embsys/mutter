@@ -85,6 +85,7 @@ typedef struct _ClutterStageViewPrivate
 
   CoglScanout *next_scanout;
 
+  GList *scanout_list;
   gboolean has_redraw_clip;
   MtkRegion *redraw_clip;
   gboolean has_accumulated_redraw_clip;
@@ -893,6 +894,7 @@ void clutter_stage_view_remove_scanout_clip (ClutterStageView *view)
   priv->has_scanout_clip = FALSE;
 }
 
+// TODO This function is obsolete with the introduction of scanout_list
 void
 clutter_stage_view_assign_next_scanout (ClutterStageView *view,
                                         CoglScanout      *scanout)
@@ -903,13 +905,22 @@ clutter_stage_view_assign_next_scanout (ClutterStageView *view,
   g_set_object (&priv->next_scanout, scanout);
 }
 
-CoglScanout *
+void clutter_stage_view_assign_scanout (ClutterStageView *stage_view,
+                                        GList            *scanout_list)
+{
+  ClutterStageViewPrivate *priv =
+    clutter_stage_view_get_instance_private (stage_view);
+
+  priv->scanout_list = g_steal_pointer (&scanout_list);
+}
+
+GList *
 clutter_stage_view_take_scanout (ClutterStageView *view)
 {
   ClutterStageViewPrivate *priv =
     clutter_stage_view_get_instance_private (view);
 
-  return g_steal_pointer (&priv->next_scanout);
+  return g_steal_pointer (&priv->scanout_list);
 }
 
 /**
@@ -918,6 +929,7 @@ clutter_stage_view_take_scanout (ClutterStageView *view)
 CoglScanout *
 clutter_stage_view_peek_scanout (ClutterStageView *view)
 {
+  // TODO Might have to look into this in the future
   ClutterStageViewPrivate *priv =
     clutter_stage_view_get_instance_private (view);
 
@@ -1099,7 +1111,7 @@ handle_frame_clock_frame (ClutterFrameClock *frame_clock,
   _clutter_stage_window_prepare_frame (stage_window, view, frame);
   clutter_stage_emit_prepare_frame (stage, view, frame);
 
-  if (clutter_stage_view_has_redraw_clip (view))
+  if (clutter_stage_view_has_redraw_clip (view) || clutter_stage_view_has_scanout_clip (view))
     {
       clutter_stage_emit_before_paint (stage, view, frame);
 

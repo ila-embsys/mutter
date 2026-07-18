@@ -132,7 +132,8 @@ void clutter_stage_notify_action_implicit_grab (ClutterStage  *self,
                                                 ClutterSprite *sprite);
 
 void clutter_stage_add_to_redraw_clip (ClutterStage       *self,
-                                       ClutterPaintVolume *clip);
+                                       ClutterPaintVolume *clip,
+                                       gboolean            track_for_scanout);
 
 CLUTTER_EXPORT
 ClutterGrab * clutter_stage_grab_input_only_inactive (ClutterStage        *self,
