@@ -958,6 +958,32 @@ meta_wayland_buffer_try_acquire_scanout (MetaWaylandBuffer     *buffer,
   return scanout;
 }
 
+MetaDrmBuffer *
+meta_wayland_buffer_try_acquire_drm_buffer (MetaWaylandBuffer *buffer,
+                                            CoglOnscreen      *onscreen)
+{
+  MetaDrmBuffer *drm_buffer = NULL;
+
+  switch (buffer->type)
+    {
+    case META_WAYLAND_BUFFER_TYPE_SHM:
+    case META_WAYLAND_BUFFER_TYPE_SINGLE_PIXEL:
+    case META_WAYLAND_BUFFER_TYPE_EGL_IMAGE:
+      meta_topic (META_DEBUG_RENDER,
+                  "Buffer type not scanout compatible");
+      return NULL;
+    case META_WAYLAND_BUFFER_TYPE_DMA_BUF:
+      drm_buffer =
+        meta_wayland_dma_buf_try_acquire_drm_buffer (buffer);
+      break;
+    case META_WAYLAND_BUFFER_TYPE_UNKNOWN:
+      g_warn_if_reached ();
+      return NULL;
+    }
+
+  return drm_buffer;
+}
+
 static void
 meta_wayland_buffer_finalize (GObject *object)
 {

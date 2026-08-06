@@ -76,3 +76,7 @@ meta_wayland_dma_buf_try_acquire_scanout (MetaWaylandBuffer     *buffer,
                                           ClutterStageView      *stage_view,
                                           const graphene_rect_t *src_rect,
                                           const MtkRectangle    *dst_rect);
+
+typedef struct _MetaDrmBuffer MetaDrmBuffer;
+
+MetaDrmBuffer * meta_wayland_dma_buf_try_acquire_drm_buffer (MetaWaylandBuffer *buffer);

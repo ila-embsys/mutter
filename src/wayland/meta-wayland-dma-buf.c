@@ -129,6 +129,8 @@ struct _MetaWaylandDmaBufBuffer
 
   MetaWaylandDmaBufManager *manager;
 
+  MetaDrmBuffer *drm_buffer;
+
   int width;
   int height;
   uint32_t drm_format;
@@ -749,6 +751,106 @@ meta_wayland_dma_buf_try_acquire_scanout (MetaWaylandBuffer     *buffer,
     }
 
   return g_steal_pointer (&scanout);
+}
+
+MetaDrmBuffer *
+meta_wayland_dma_buf_try_acquire_drm_buffer (MetaWaylandBuffer *buffer)
+{
+  MetaWaylandDmaBufBuffer *dma_buf;
+  MetaContext *context;
+  MetaBackend *backend;
+  MetaRenderer *renderer;
+  MetaRendererNative *renderer_native;
+  MetaDeviceFile *device_file;
+  MetaGpuKms *gpu_kms;
+  struct gbm_bo *gbm_bo;
+  g_autoptr (MetaDrmBufferGbm) fb = NULL;
+  g_autoptr (GError) error = NULL;
+  MetaDrmBufferFlags flags;
+  uint32_t drm_format;
+  gboolean use_modifier;
+  int n_planes;
+
+  dma_buf = meta_wayland_dma_buf_from_buffer (buffer);
+  if (!dma_buf)
+    return NULL;
+
+  if (dma_buf->drm_buffer)
+    return g_object_ref (dma_buf->drm_buffer);
+
+  drm_format = dma_buf->drm_format;
+
+  {
+    MetaDrmFormatBuf format_buf;
+
+    meta_topic (META_DEBUG_RENDER,
+                "try_acquire_drm_buffer: format %s, modifier 0x%" G_GINT64_MODIFIER "x, "
+                "%dx%d",
+                meta_drm_format_to_string (&format_buf, drm_format),
+                dma_buf->drm_modifier,
+                dma_buf->width, dma_buf->height);
+  }
+
+  context = meta_wayland_compositor_get_context (dma_buf->manager->compositor);
+  backend = meta_context_get_backend (context);
+  renderer = meta_backend_get_renderer (backend);
+  renderer_native = META_RENDERER_NATIVE (renderer);
+
+  for (n_planes = 0; n_planes < META_WAYLAND_DMA_BUF_MAX_FDS; n_planes++)
+    {
+      if (dma_buf->fds[n_planes] < 0)
+        break;
+    }
+
+  device_file = meta_renderer_native_get_primary_device_file (renderer_native);
+  gpu_kms = meta_renderer_native_get_primary_gpu (renderer_native);
+  gbm_bo = import_scanout_gbm_bo (dma_buf,
+                                  gpu_kms,
+                                  n_planes,
+                                  drm_format,
+                                  &use_modifier,
+                                  &error);
+  if (!gbm_bo)
+    {
+      const MetaFormatInfo *format_info;
+
+      format_info = meta_format_info_from_drm_format (drm_format);
+      if (format_info &&
+          format_info->opaque_substitute != DRM_FORMAT_INVALID)
+        {
+          g_clear_error (&error);
+          gbm_bo = import_scanout_gbm_bo (dma_buf,
+                                          gpu_kms,
+                                          n_planes,
+                                          format_info->opaque_substitute,
+                                          &use_modifier,
+                                          &error);
+        }
+    }
+
+  if (!gbm_bo)
+    {
+      meta_topic (META_DEBUG_RENDER,
+                  "Failed to import scanout gbm_bo: %s", error->message);
+      return NULL;
+    }
+
+  flags = META_DRM_BUFFER_FLAG_NONE;
+  if (!use_modifier)
+    flags |= META_DRM_BUFFER_FLAG_DISABLE_MODIFIERS;
+
+  fb = meta_drm_buffer_gbm_new_take (device_file, gbm_bo, flags, &error);
+  if (!fb)
+    {
+      meta_topic (META_DEBUG_RENDER,
+                  "Failed to create scanout buffer: %s", error->message);
+      gbm_bo_destroy (gbm_bo);
+      return NULL;
+    }
+
+  dma_buf->drm_buffer = g_object_ref (META_DRM_BUFFER (fb));
+
+  return META_DRM_BUFFER (g_steal_pointer (&fb));
 }
 
 static void
@@ -1971,6 +2073,8 @@ meta_wayland_dma_buf_buffer_finalize (GObject *object)
 {
   MetaWaylandDmaBufBuffer *dma_buf = META_WAYLAND_DMA_BUF_BUFFER (object);
   int i;
+
+  g_clear_object (&dma_buf->drm_buffer);
 
   for (i = 0; i < META_WAYLAND_DMA_BUF_MAX_FDS; i++)
     g_clear_fd (&dma_buf->fds[i], NULL);

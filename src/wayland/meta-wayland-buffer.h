@@ -100,4 +100,7 @@ CoglScanout *           meta_wayland_buffer_try_acquire_scanout (MetaWaylandBuff
                                                                  const graphene_rect_t *src_rect,
                                                                  const MtkRectangle    *dst_rect);
 
+MetaDrmBuffer * meta_wayland_buffer_try_acquire_drm_buffer (MetaWaylandBuffer *buffer,
+                                                            CoglOnscreen      *onscreen);
+
 void meta_wayland_init_shm (MetaWaylandCompositor *compositor);
