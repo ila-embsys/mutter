@@ -20,6 +20,7 @@
 
 #include "config.h"
 
+#include "clutter/clutter-solid-fill-actor.h"
 #include "compositor/clutter-utils.h"
 #include "compositor/meta-cullable.h"
 #include "compositor/meta-surface-actor-wayland.h"
@@ -618,9 +619,8 @@ do_sync_geometry (MetaWindowActorWayland *self)
 
       if (!self->background)
         {
-          self->background = clutter_actor_new ();
-          clutter_actor_set_background_color (self->background,
-                                              &COGL_COLOR_INIT (0, 0, 0, 255));
+          self->background =
+            clutter_solid_fill_actor_new (&COGL_COLOR_INIT (0, 0, 0, 255));
           clutter_actor_set_reactive (self->background, TRUE);
           clutter_actor_insert_child_below (CLUTTER_ACTOR (self),
                                             self->background,

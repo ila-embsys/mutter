@@ -20,6 +20,7 @@
 #include "compositor/meta-surface-actor.h"
 
 #include "clutter/clutter.h"
+#include "clutter/clutter-offloadable.h"
 #include "compositor/clutter-utils.h"
 #include "compositor/meta-background-effect.h"
 #include "compositor/meta-cullable.h"
@@ -63,10 +64,16 @@ typedef struct _MetaSurfaceActorPrivate
 } MetaSurfaceActorPrivate;
 
 static void cullable_iface_init (MetaCullableInterface *iface);
+static void offloadable_iface_init (ClutterOffloadableInterface *iface);
 
-G_DEFINE_ABSTRACT_TYPE_WITH_CODE (MetaSurfaceActor, meta_surface_actor, CLUTTER_TYPE_ACTOR,
+G_DEFINE_ABSTRACT_TYPE_WITH_CODE (MetaSurfaceActor,
+                                  meta_surface_actor,
+                                  CLUTTER_TYPE_ACTOR,
                                   G_ADD_PRIVATE (MetaSurfaceActor)
-                                  G_IMPLEMENT_INTERFACE (META_TYPE_CULLABLE, cullable_iface_init));
+                                  G_IMPLEMENT_INTERFACE (META_TYPE_CULLABLE,
+                                                         cullable_iface_init)
+                                  G_IMPLEMENT_INTERFACE (CLUTTER_TYPE_OFFLOADABLE,
+                                                         offloadable_iface_init));
 
 enum
 {
@@ -418,6 +425,51 @@ gboolean
 meta_surface_actor_is_opaque (MetaSurfaceActor *self)
 {
   return META_SURFACE_ACTOR_GET_CLASS (self)->is_opaque (self);
+}
+
+static ClutterOffloadType
+meta_surface_actor_get_offload_type (ClutterOffloadable  *offloadable,
+                                     ClutterStageView    *stage_view,
+                                     MtkRegion          **out_region)
+{
+  MetaSurfaceActor *self = META_SURFACE_ACTOR (offloadable);
+  MetaSurfaceActorPrivate *priv =
+    meta_surface_actor_get_instance_private (self);
+  MetaShapedTexture *stex;
+  uint8_t opacity;
+  graphene_rect_t extents;
+  MtkRectangle rect;
+
+  if (priv->background_blur)
+    return CLUTTER_OFFLOAD_TYPE_NONE;
+
+  stex = meta_surface_actor_get_texture (self);
+  if (!meta_shaped_texture_get_texture (stex))
+    return CLUTTER_OFFLOAD_TYPE_NONE;
+
+  opacity = clutter_actor_get_paint_opacity (CLUTTER_ACTOR (self));
+
+  clutter_actor_get_transformed_extents (CLUTTER_ACTOR (self), &extents);
+
+  rect = (MtkRectangle) {
+    .x = (int) extents.origin.x,
+    .y = (int) extents.origin.y,
+    .width = (int) extents.size.width,
+    .height = (int) extents.size.height,
+  };
+
+  *out_region = mtk_region_create_rectangle (&rect);
+
+  if (meta_surface_actor_is_opaque (self) && opacity == 0xff)
+    return CLUTTER_OFFLOAD_TYPE_OPAQUE;
+
+  return CLUTTER_OFFLOAD_TYPE_ALPHA;
+}
+
+static void
+offloadable_iface_init (ClutterOffloadableInterface *iface)
+{
+  iface->get_offload_type = meta_surface_actor_get_offload_type;
 }
 
 static void
