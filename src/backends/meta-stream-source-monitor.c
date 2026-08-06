@@ -207,7 +207,7 @@ before_stage_painted (MetaStage        *stage,
   if (source_monitor->maybe_record_idle_id)
     return;
 
-  if (!clutter_stage_view_peek_scanout (view))
+  if (!clutter_frame_get_offloaded (frame))
     return;
 
   if (!clutter_frame_get_expected_presentation_time (frame,
@@ -695,10 +695,6 @@ meta_stream_source_monitor_record_to_framebuffer (MetaStreamSource      *source,
   gboolean do_stage_paint = TRUE;
   float view_scale;
   GList *outputs;
-  ClutterColorState *target_color_state =
-    meta_stream_source_get_color_state (source);
-  ClutterColorState *view_color_state;
-  ClutterColorState *output_color_state;
 
   monitor = get_monitor (source_monitor);
   logical_monitor = meta_monitor_get_logical_monitor (monitor);
@@ -724,34 +720,9 @@ meta_stream_source_monitor_record_to_framebuffer (MetaStreamSource      *source,
   view = CLUTTER_STAGE_VIEW (renderer_view);
   clutter_stage_view_get_layout (view, &view_layout);
 
-  view_color_state = clutter_stage_view_get_color_state (view);
-  output_color_state = clutter_stage_view_get_output_color_state (view);
-
   switch (paint_phase)
     {
     case META_STREAM_PAINT_PHASE_PRE_PAINT:
-      {
-        CoglScanout *scanout = clutter_stage_view_peek_scanout (view);
-
-        if (scanout &&
-            clutter_color_state_equals (target_color_state, output_color_state))
-          {
-            g_autoptr (GError) local_error = NULL;
-
-            if (cogl_scanout_copy_to_framebuffer (scanout,
-                                                  framebuffer,
-                                                  &local_error))
-              {
-                cogl_framebuffer_flush (framebuffer);
-                do_stage_paint = FALSE;
-              }
-            else
-              {
-                g_warning ("Error copying to screencast framebuffer: %s",
-                           local_error->message);
-              }
-          }
-      }
       break;
 
     case META_STREAM_PAINT_PHASE_PRE_SWAP_BUFFER:
@@ -762,6 +733,10 @@ meta_stream_source_monitor_record_to_framebuffer (MetaStreamSource      *source,
           cogl_framebuffer_get_context (view_framebuffer);
         CoglDriver *cogl_driver =
           cogl_context_get_driver (cogl_context);
+        ClutterColorState *target_color_state =
+          meta_stream_source_get_color_state (source);
+        ClutterColorState *view_color_state =
+          clutter_stage_view_get_color_state (view);
 
         if (cogl_driver_has_feature (cogl_driver,
                                      COGL_FEATURE_ID_BLIT_FRAMEBUFFER) &&
@@ -805,6 +780,8 @@ stage_paint:
       MetaContext *context = meta_backend_get_context (backend);
       MetaDebugControl *debug_control = meta_context_get_debug_control (context);
       ClutterPaintFlag paint_flags = CLUTTER_PAINT_FLAG_NONE;
+      ClutterColorState *target_color_state =
+        meta_stream_source_get_color_state (source);
       g_autoptr (ClutterColorState) blending_color_state = NULL;
       gboolean force_linear;
 
@@ -821,7 +798,6 @@ stage_paint:
         }
 
       force_linear = meta_debug_control_is_linear_blending_forced (debug_control);
-
       blending_color_state = clutter_color_state_get_blending (target_color_state,
                                                                force_linear);
 

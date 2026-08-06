@@ -263,7 +263,7 @@ before_stage_painted (MetaStage        *stage,
   if (source_area->maybe_record_idle_id)
     return;
 
-  if (!clutter_stage_view_peek_scanout (view))
+  if (!clutter_frame_get_offloaded (frame))
     return;
 
   source_area->maybe_record_idle_id =
