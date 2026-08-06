@@ -56,6 +56,8 @@ void meta_surface_actor_paint_background_effects (MetaSurfaceActor    *surface_a
 
 void meta_surface_actor_schedule_update (MetaSurfaceActor *self);
 
+float meta_surface_actor_get_update_frequency (MetaSurfaceActor *self);
+
 void meta_surface_actor_process_damage (MetaSurfaceActor   *actor,
                                         const MtkRectangle *area);
 

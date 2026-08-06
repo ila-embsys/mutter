@@ -61,6 +61,11 @@ typedef struct _MetaSurfaceActorPrivate
   /* Freeze/thaw accounting */
   MtkRegion *pending_damage;
   gboolean is_frozen;
+
+#define UPDATE_HISTORY_SIZE 8
+  int64_t update_times_us[UPDATE_HISTORY_SIZE];
+  int update_times_count;
+  int update_times_index;
 } MetaSurfaceActorPrivate;
 
 static void cullable_iface_init (MetaCullableInterface *iface);
@@ -605,6 +610,20 @@ meta_surface_actor_get_texture (MetaSurfaceActor *self)
   return meta_surface_content_get_texture (priv->content);
 }
 
+static void
+track_content_update (MetaSurfaceActor *self)
+{
+  MetaSurfaceActorPrivate *priv =
+    meta_surface_actor_get_instance_private (self);
+
+  priv->update_times_us[priv->update_times_index] = g_get_monotonic_time ();
+  priv->update_times_index =
+    (priv->update_times_index + 1) % UPDATE_HISTORY_SIZE;
+
+  if (priv->update_times_count < UPDATE_HISTORY_SIZE)
+    priv->update_times_count++;
+}
+
 void
 meta_surface_actor_schedule_update (MetaSurfaceActor *self)
 {
@@ -613,6 +632,8 @@ meta_surface_actor_schedule_update (MetaSurfaceActor *self)
   stage = CLUTTER_STAGE (clutter_actor_get_stage (CLUTTER_ACTOR (self)));
   if (!stage)
     return;
+
+  track_content_update (self);
 
   clutter_stage_schedule_update (stage);
 
@@ -667,7 +688,38 @@ meta_surface_actor_update_area (MetaSurfaceActor   *self,
     }
 
   if (repaint_scheduled)
-    g_signal_emit (self, signals[REPAINT_SCHEDULED], 0);
+    {
+      track_content_update (self);
+      g_signal_emit (self, signals[REPAINT_SCHEDULED], 0);
+    }
+}
+
+float
+meta_surface_actor_get_update_frequency (MetaSurfaceActor *self)
+{
+  MetaSurfaceActorPrivate *priv =
+    meta_surface_actor_get_instance_private (self);
+  int oldest_index;
+  int64_t oldest_us, newest_us, span_us;
+
+  if (priv->update_times_count < 2)
+    return 0.0f;
+
+  newest_us =
+    priv->update_times_us[(priv->update_times_index - 1 + UPDATE_HISTORY_SIZE) %
+                          UPDATE_HISTORY_SIZE];
+
+  oldest_index =
+    (priv->update_times_index - priv->update_times_count + UPDATE_HISTORY_SIZE) %
+    UPDATE_HISTORY_SIZE;
+  oldest_us = priv->update_times_us[oldest_index];
+
+  span_us = newest_us - oldest_us;
+  if (span_us <= 0)
+    return 0.0f;
+
+  return (float) (priv->update_times_count - 1) * G_USEC_PER_SEC /
+         (float) span_us;
 }
 
 gboolean
