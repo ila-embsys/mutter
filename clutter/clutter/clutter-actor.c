@@ -508,7 +508,9 @@
 #include "clutter/clutter-enum-types.h"
 #include "clutter/clutter-fixed-layout.h"
 #include "clutter/clutter-flatten-effect.h"
+#include "clutter/clutter-frame-private.h"
 #include "clutter/clutter-interval.h"
+#include "clutter/clutter-offloadable.h"
 #include "clutter/clutter-main.h"
 #include "clutter/clutter-marshal.h"
 #include "clutter/clutter-mutter.h"
@@ -3485,6 +3487,24 @@ clutter_actor_paint_node (ClutterActor        *actor,
   return TRUE;
 }
 
+static gboolean
+clutter_actor_is_offloaded (ClutterActor        *actor,
+                            ClutterPaintContext *paint_context)
+{
+  ClutterFrame *frame;
+  ClutterOffloadableOffloaded *offloaded;
+
+  frame = clutter_paint_context_get_frame (paint_context);
+  if (!frame)
+    return FALSE;
+
+  offloaded = clutter_frame_get_offloaded (frame);
+  if (!offloaded)
+    return FALSE;
+
+  return clutter_offloadable_offloaded_contains_actor (offloaded, actor);
+}
+
 /**
  * clutter_actor_paint:
  * @self: A #ClutterActor
@@ -3535,6 +3555,9 @@ clutter_actor_paint (ClutterActor        *self,
    * parents paintable) then do nothing.
    */
   if (!clutter_actor_is_mapped (self))
+    return;
+
+  if (clutter_actor_is_offloaded (self, paint_context))
     return;
 
 #ifdef HAVE_PROFILER

@@ -18,6 +18,7 @@
 #include "config.h"
 
 #include "clutter/clutter-frame-private.h"
+#include "clutter/clutter-offloadable.h"
 
 G_DEFINE_BOXED_TYPE (ClutterFrame, clutter_frame,
                      clutter_frame_ref,
@@ -38,6 +39,7 @@ clutter_frame_unref (ClutterFrame *frame)
       if (frame->release)
         frame->release (frame);
       g_clear_object (&frame->cogl_frame_info);
+      g_clear_object (&frame->offloaded);
       g_free (frame);
     }
 }
@@ -130,4 +132,17 @@ clutter_frame_set_result (ClutterFrame       *frame,
 
   frame->result = result;
   frame->has_result = TRUE;
+}
+
+void
+clutter_frame_set_offloaded (ClutterFrame                *frame,
+                             ClutterOffloadableOffloaded *offloaded)
+{
+  g_set_object (&frame->offloaded, offloaded);
+}
+
+ClutterOffloadableOffloaded *
+clutter_frame_get_offloaded (ClutterFrame *frame)
+{
+  return frame->offloaded;
 }

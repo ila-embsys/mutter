@@ -20,6 +20,7 @@
 #include "backends/native/meta-backend-native-types.h"
 #include "backends/native/meta-kms-types.h"
 #include "clutter/clutter.h"
+#include "clutter/clutter-offloadable.h"
 #include "core/util-private.h"
 
 typedef struct _MetaFrameNative MetaFrameNative;
@@ -75,3 +76,8 @@ meta_frame_native_remove_source (MetaFrameNative *frame_native,
 
 gboolean
 meta_frame_native_is_ready (MetaFrameNative *frame_native);
+
+void meta_frame_native_set_offloaded (MetaFrameNative             *frame_native,
+                                      ClutterOffloadableOffloaded *offloaded);
+
+ClutterOffloadableOffloaded * meta_frame_native_get_offloaded (MetaFrameNative *frame_native);

@@ -19,6 +19,8 @@
 
 #include "clutter/clutter-frame.h"
 
+typedef struct _ClutterOffloadableOffloaded ClutterOffloadableOffloaded;
+
 typedef void (* ClutterFrameRelease) (ClutterFrame *frame);
 
 struct _ClutterFrame
@@ -39,6 +41,8 @@ struct _ClutterFrame
   ClutterFrameResult result;
 
   CoglFrameInfo *cogl_frame_info;
+
+  ClutterOffloadableOffloaded *offloaded;
 };
 
 CLUTTER_EXPORT
@@ -50,3 +54,10 @@ gpointer clutter_frame_new (size_t              size,
 
 CLUTTER_EXPORT
 ClutterFrameResult clutter_frame_get_result (ClutterFrame *frame);
+
+CLUTTER_EXPORT
+void clutter_frame_set_offloaded (ClutterFrame                *frame,
+                                  ClutterOffloadableOffloaded *offloaded);
+
+CLUTTER_EXPORT
+ClutterOffloadableOffloaded * clutter_frame_get_offloaded (ClutterFrame *frame);

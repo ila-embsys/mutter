@@ -20,7 +20,9 @@
 #include "backends/native/meta-frame-native.h"
 
 #include "backends/native/meta-kms-update.h"
+#include "clutter/clutter-frame-private.h"
 #include "clutter/clutter-mutter.h"
+#include "clutter/clutter-offloadable.h"
 #include "core/util-private.h"
 
 #include <glib/gstdio.h>
@@ -189,4 +191,17 @@ meta_frame_native_is_ready (MetaFrameNative *frame_native)
   g_return_val_if_fail (frame_native->sync.events != 0, FALSE);
 
   return !!(frame_native->sync.revents & G_IO_IN);
+}
+
+void
+meta_frame_native_set_offloaded (MetaFrameNative             *frame_native,
+                                 ClutterOffloadableOffloaded *offloaded)
+{
+  clutter_frame_set_offloaded (&frame_native->parent, offloaded);
+}
+
+ClutterOffloadableOffloaded *
+meta_frame_native_get_offloaded (MetaFrameNative *frame_native)
+{
+  return clutter_frame_get_offloaded (&frame_native->parent);
 }
