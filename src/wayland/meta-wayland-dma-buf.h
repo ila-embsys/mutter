@@ -79,4 +79,9 @@ meta_wayland_dma_buf_try_acquire_scanout (MetaWaylandBuffer     *buffer,
 
 typedef struct _MetaDrmBuffer MetaDrmBuffer;
 
+#include "backends/native/meta-scanout-feedback.h"
+
 MetaDrmBuffer * meta_wayland_dma_buf_try_acquire_drm_buffer (MetaWaylandBuffer *buffer);
+
+void meta_wayland_dma_buf_update_scanout_feedback (MetaWaylandSurface  *surface,
+                                                   MetaScanoutFeedback *scanout_feedback);

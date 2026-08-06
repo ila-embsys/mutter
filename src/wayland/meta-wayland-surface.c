@@ -83,7 +83,6 @@ enum
 {
   PROP_0,
 
-  PROP_SCANOUT_CANDIDATE,
   PROP_WINDOW,
   PROP_MAIN_MONITOR,
 
@@ -1744,7 +1743,6 @@ meta_wayland_surface_dispose (GObject *object)
   MetaWaylandSurface *subsurface_surface;
   MetaWaylandFrameCallback *cb, *next;
 
-  g_clear_object (&surface->scanout_candidate);
   g_clear_object (&surface->role);
 
   if (surface->unassigned.buffer)
@@ -2091,9 +2089,6 @@ meta_wayland_surface_get_property (GObject    *object,
 
   switch (prop_id)
     {
-    case PROP_SCANOUT_CANDIDATE:
-      g_value_set_object (value, surface->scanout_candidate);
-      break;
     case PROP_WINDOW:
       g_value_set_object (value, meta_wayland_surface_get_window (surface));
       break;
@@ -2134,12 +2129,6 @@ meta_wayland_surface_class_init (MetaWaylandSurfaceClass *klass)
   object_class->dispose = meta_wayland_surface_dispose;
   object_class->get_property = meta_wayland_surface_get_property;
   object_class->set_property = meta_wayland_surface_set_property;
-
-  obj_props[PROP_SCANOUT_CANDIDATE] =
-    g_param_spec_object ("scanout-candidate", NULL, NULL,
-                         META_TYPE_CRTC,
-                         G_PARAM_READABLE |
-                         G_PARAM_STATIC_STRINGS);
 
   obj_props[PROP_WINDOW] =
     g_param_spec_object ("window", NULL, NULL,
@@ -2660,24 +2649,6 @@ meta_wayland_surface_try_acquire_scanout (MetaWaylandSurface *surface,
                                                   stage_view,
                                                   src_rect_ptr,
                                                   &crtc_dst_rect);
-}
-
-MetaCrtc *
-meta_wayland_surface_get_scanout_candidate (MetaWaylandSurface *surface)
-{
-  return surface->scanout_candidate;
-}
-
-void
-meta_wayland_surface_set_scanout_candidate (MetaWaylandSurface *surface,
-                                            MetaCrtc           *crtc)
-{
-  if (surface->scanout_candidate == crtc)
-    return;
-
-  g_set_object (&surface->scanout_candidate, crtc);
-  g_object_notify_by_pspec (G_OBJECT (surface),
-                            obj_props[PROP_SCANOUT_CANDIDATE]);
 }
 
 int

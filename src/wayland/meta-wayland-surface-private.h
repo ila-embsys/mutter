@@ -290,9 +290,6 @@ struct _MetaWaylandSurface
     uint64_t sequence;
   } presentation_time;
 
-  /* dma-buf feedback */
-  MetaCrtc *scanout_candidate;
-
   /* Transactions */
   struct {
     /* First & last committed transaction which has an entry for this surface */
@@ -430,10 +427,6 @@ CoglScanout *       meta_wayland_surface_try_acquire_scanout (MetaWaylandSurface
                                                               CoglOnscreen       *onscreen,
                                                               ClutterStageView   *stage_view);
 
-MetaCrtc * meta_wayland_surface_get_scanout_candidate (MetaWaylandSurface *surface);
-
-void meta_wayland_surface_set_scanout_candidate (MetaWaylandSurface *surface,
-                                                 MetaCrtc           *crtc);
 
 int meta_wayland_surface_get_geometry_scale (MetaWaylandSurface *surface);
 

@@ -730,6 +730,8 @@ mutter_sources += [
   'backends/native/meta-kms-page-flip.c',
   'backends/native/meta-kms-page-flip-private.h',
   'backends/native/meta-kms-plane.c',
+  'backends/native/meta-scanout-feedback.c',
+  'backends/native/meta-scanout-feedback.h',
   'backends/native/meta-kms-plane-private.h',
   'backends/native/meta-kms-plane.h',
   'backends/native/meta-kms-private.h',

@@ -50,8 +50,6 @@ struct _MetaCompositorViewNative
 {
   MetaCompositorView parent;
 
-  MetaWaylandSurface *scanout_candidate;
-
   MetaSurfaceActor *fullscreen_actor;
 
   gulong fullscreen_surface_repaint_scheduled_id;
@@ -90,27 +88,6 @@ on_fullscreen_actor_destroyed (MetaSurfaceActor         *surface_actor,
                                MetaCompositorViewNative *view_native)
 {
   update_fullscreen_actor (view_native, NULL);
-}
-
-static void
-update_scanout_candidate (MetaCompositorViewNative *view_native,
-                          MetaWaylandSurface       *surface,
-                          MetaCrtc                 *crtc)
-{
-  if (view_native->scanout_candidate &&
-      view_native->scanout_candidate != surface)
-    {
-      meta_wayland_surface_set_scanout_candidate (view_native->scanout_candidate,
-                                                  NULL);
-      g_clear_weak_pointer (&view_native->scanout_candidate);
-    }
-
-  if (surface)
-    {
-      meta_wayland_surface_set_scanout_candidate (surface, crtc);
-      g_set_weak_pointer (&view_native->scanout_candidate,
-                          surface);
-    }
 }
 
 static MetaSurfaceActor *
@@ -430,7 +407,6 @@ meta_compositor_view_native_maybe_assign_scanout (MetaCompositorViewNative *view
                                surface);
     }
 
-  update_scanout_candidate (view_native, surface, crtc);
 }
 
 static MetaSurfaceActor *
@@ -529,8 +505,6 @@ static void
 meta_compositor_view_native_finalize (GObject *object)
 {
   MetaCompositorViewNative *view_native = META_COMPOSITOR_VIEW_NATIVE (object);
-
-  g_clear_weak_pointer (&view_native->scanout_candidate);
 
   G_OBJECT_CLASS (meta_compositor_view_native_parent_class)->finalize (object);
 }
