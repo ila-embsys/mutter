@@ -139,6 +139,7 @@ struct _MetaOnscreenNative
   MetaDrmBuffer *presented_buffer;
   ClutterFrame *posted_frame;
   ClutterFrame *next_frame;
+  MetaDrmBuffer *current_primary_buffer;
   GSource *next_frame_ready_source;
 
   struct {
@@ -2005,6 +2006,7 @@ maybe_post_next_frame (CoglOnscreen *onscreen)
             }
 
           meta_frame_native_set_buffer (frame_native, buffer);
+          g_set_object (&onscreen_native->current_primary_buffer, buffer);
 
           if (!meta_drm_buffer_ensure_fb_id (buffer, &error))
             {
@@ -2270,6 +2272,8 @@ meta_onscreen_native_direct_scanout (CoglOnscreen   *onscreen,
   meta_frame_native_set_scanout (frame_native, scanout);
   meta_frame_native_set_buffer (frame_native,
                                 META_DRM_BUFFER (cogl_scanout_get_buffer (scanout)));
+  g_set_object (&onscreen_native->current_primary_buffer,
+                META_DRM_BUFFER (cogl_scanout_get_buffer (scanout)));
 
   clutter_frame_set_result (frame, CLUTTER_FRAME_RESULT_PENDING_PRESENTED);
 
@@ -2394,6 +2398,12 @@ add_cogl_frame_info (MetaCrtc     *crtc,
   meta_stage_impl_add_cogl_frame_info (META_STAGE_IMPL (stage_window),
                                        CLUTTER_STAGE_VIEW (view),
                                        frame);
+}
+
+MetaDrmBuffer *
+meta_onscreen_native_get_standin_buffer (MetaOnscreenNative *onscreen_native)
+{
+  return onscreen_native->current_primary_buffer;
 }
 
 void
@@ -3869,6 +3879,7 @@ meta_onscreen_native_dispose (GObject *object)
   meta_onscreen_native_discard_pending_swaps (onscreen);
   g_clear_pointer (&onscreen_native->posted_frame, clutter_frame_unref);
   g_clear_object (&onscreen_native->presented_buffer);
+  g_clear_object (&onscreen_native->current_primary_buffer);
 
   renderer_gpu_data =
     meta_renderer_native_get_gpu_data (renderer_native,
