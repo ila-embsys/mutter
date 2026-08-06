@@ -242,5 +242,8 @@ void meta_kms_page_flip_listener_unref (MetaKmsPageFlipListener *listener);
 
 gboolean meta_kms_update_is_empty (MetaKmsUpdate *update);
 
+void meta_kms_update_drop_plane_assignment (MetaKmsUpdate *update,
+                                            MetaKmsPlane  *plane);
+
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (MetaKmsPlaneFeedback,
                                meta_kms_plane_feedback_free)

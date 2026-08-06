@@ -237,6 +237,13 @@ drop_plane_assignment (MetaKmsUpdate          *update,
   return FALSE;
 }
 
+void
+meta_kms_update_drop_plane_assignment (MetaKmsUpdate *update,
+                                       MetaKmsPlane  *plane)
+{
+  drop_plane_assignment (update, plane, NULL);
+}
+
 static void
 update_latch_crtc (MetaKmsUpdate *update,
                    MetaKmsCrtc   *crtc)
@@ -641,6 +648,14 @@ meta_kms_update_add_page_flip_listener (MetaKmsUpdate                       *upd
 
   update->page_flip_listeners = g_list_prepend (update->page_flip_listeners,
                                                 listener);
+}
+
+void
+meta_kms_plane_assignment_set_buffer (MetaKmsPlaneAssignment *plane_assignment,
+                                      MetaDrmBuffer          *buffer)
+{
+  plane_assignment->buffer = buffer;
+  plane_assignment->flags &= ~META_KMS_ASSIGN_PLANE_FLAG_FB_UNCHANGED;
 }
 
 void
