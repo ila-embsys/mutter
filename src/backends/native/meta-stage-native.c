@@ -25,10 +25,13 @@
 #include "backends/native/meta-stage-native.h"
 
 #include "backends/meta-backend-private.h"
+#include "backends/meta-stage-impl-private.h"
 #include "backends/native/meta-crtc-virtual.h"
 #include "backends/native/meta-cursor-renderer-native.h"
 #include "backends/native/meta-renderer-native.h"
 #include "backends/native/meta-seat-native.h"
+#include "clutter/clutter-mutter.h"
+#include "clutter/clutter-offloadable.h"
 #include "meta/meta-backend.h"
 #include "meta/meta-monitor-manager.h"
 #include "meta/util.h"
@@ -124,10 +127,20 @@ meta_stage_native_redraw_view (ClutterStageWindow *stage_window,
   MetaStageImpl *stage_impl = META_STAGE_IMPL (stage_window);
   MetaBackend *backend = meta_stage_impl_get_backend (stage_impl);
   MetaRenderer *renderer = meta_backend_get_renderer (backend);
+  ClutterOffloadableOffloaded *offloaded;
   MetaCrtc *crtc;
 
   meta_renderer_native_before_redraw (META_RENDERER_NATIVE (renderer),
                                       META_RENDERER_VIEW (view), frame);
+
+  offloaded = clutter_frame_get_offloaded (frame);
+  if (offloaded &&
+      clutter_offloadable_offloaded_get_primary_actor (offloaded))
+    {
+      meta_stage_impl_add_cogl_frame_info (stage_impl, view, frame);
+      clutter_stage_view_accumulate_redraw_clip (view);
+      return;
+    }
 
   CLUTTER_STAGE_WINDOW_CLASS (meta_stage_native_parent_class)->
       redraw_view (stage_window, view, frame);

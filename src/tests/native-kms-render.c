@@ -31,6 +31,7 @@
 #include "backends/native/meta-kms-device.h"
 #include "backends/native/meta-kms-device-private.h"
 #include "backends/native/meta-kms-impl-device-atomic.h"
+#include "backends/native/meta-kms-update-private.h"
 #include "core/display-private.h"
 #include "meta/meta-backend.h"
 #include "meta-test/meta-context-test.h"
@@ -134,18 +135,32 @@ on_scanout_before_paint (ClutterStage     *stage,
                          ClutterFrame     *frame,
                          KmsRenderingTest *test)
 {
-  CoglScanout *scanout;
-  CoglScanoutBuffer *scanout_buffer;
-  MetaDrmBuffer *buffer;
+  MetaRendererView *view = META_RENDERER_VIEW (stage_view);
+  ClutterOffloadableOffloaded *offloaded;
+  MetaFrameNative *frame_native;
+  MetaCrtc *crtc;
+  MetaKmsCrtc *kms_crtc;
+  MetaKmsUpdate *kms_update;
+  MetaKmsPlaneAssignment *plane_assignment;
 
-  scanout = clutter_stage_view_peek_scanout (stage_view);
-  if (!scanout)
+  offloaded = clutter_frame_get_offloaded (frame);
+  if (!offloaded ||
+      !clutter_offloadable_offloaded_get_primary_actor (offloaded))
     return;
 
-  scanout_buffer = cogl_scanout_get_buffer (scanout);
-  g_assert_true (META_IS_DRM_BUFFER (scanout_buffer));
-  buffer = META_DRM_BUFFER (scanout_buffer);
-  test->scanout.fb_id = meta_drm_buffer_get_fb_id (buffer);
+  frame_native = meta_frame_native_from_frame (frame);
+  crtc = meta_renderer_view_get_crtc (view);
+  kms_crtc = meta_crtc_kms_get_kms_crtc (META_CRTC_KMS (crtc));
+  kms_update = meta_frame_native_ensure_kms_update (frame_native,
+                                                     meta_kms_crtc_get_device (kms_crtc));
+  plane_assignment =
+    meta_kms_update_get_primary_plane_assignment (kms_update, kms_crtc);
+
+  g_assert_nonnull (plane_assignment);
+  g_assert_nonnull (plane_assignment->buffer);
+
+  test->scanout.fb_id =
+    meta_drm_buffer_get_fb_id (plane_assignment->buffer);
   g_assert_cmpuint (test->scanout.fb_id, >, 0);
 }
 
@@ -354,15 +369,16 @@ on_scanout_fallback_before_paint (ClutterStage     *stage,
                                   KmsRenderingTest *test)
 {
   MetaRendererView *view = META_RENDERER_VIEW (stage_view);
+  ClutterOffloadableOffloaded *offloaded;
   MetaCrtc *crtc = meta_renderer_view_get_crtc (view);
   MetaKmsCrtc *kms_crtc = meta_crtc_kms_get_kms_crtc (META_CRTC_KMS (crtc));
   MetaKmsDevice *kms_device = meta_kms_crtc_get_device (kms_crtc);
   MetaFrameNative *frame_native = meta_frame_native_from_frame (frame);
-  CoglScanout *scanout;
   MetaKmsUpdate *kms_update;
 
-  scanout = clutter_stage_view_peek_scanout (stage_view);
-  if (!scanout)
+  offloaded = clutter_frame_get_offloaded (frame);
+  if (!offloaded ||
+      !clutter_offloadable_offloaded_get_primary_actor (offloaded))
     return;
 
   g_assert_false (test->scanout_fallback.scanout_sabotaged);

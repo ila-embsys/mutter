@@ -39,11 +39,9 @@ meta_compositor_native_before_paint (MetaCompositor     *compositor,
     META_COMPOSITOR_VIEW_NATIVE (compositor_view);
   MetaCompositorClass *parent_class;
 
-  meta_compositor_view_native_maybe_assign_scanout (compositor_view_native,
-                                                    compositor);
-
-  meta_compositor_view_native_maybe_update_fullscreen_actor (compositor_view_native,
-                                                             compositor);
+  meta_compositor_view_native_before_paint (compositor_view_native,
+                                            compositor,
+                                            frame);
 
   parent_class = META_COMPOSITOR_CLASS (meta_compositor_native_parent_class);
   parent_class->before_paint (compositor, compositor_view, frame);

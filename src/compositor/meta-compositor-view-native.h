@@ -30,10 +30,8 @@
 G_DECLARE_FINAL_TYPE (MetaCompositorViewNative, meta_compositor_view_native,
                       META, COMPOSITOR_VIEW_NATIVE, MetaCompositorView)
 
-MetaCompositorViewNative *meta_compositor_view_native_new (ClutterStageView *stage_view);
+MetaCompositorViewNative * meta_compositor_view_native_new (ClutterStageView *stage_view);
 
-void meta_compositor_view_native_maybe_assign_scanout (MetaCompositorViewNative *view_native,
-                                                       MetaCompositor           *compositor);
-
-void meta_compositor_view_native_maybe_update_fullscreen_actor (MetaCompositorViewNative *view_native,
-                                                                MetaCompositor           *compositor);
+void meta_compositor_view_native_before_paint (MetaCompositorViewNative *view_native,
+                                               MetaCompositor           *compositor,
+                                               ClutterFrame             *frame);
