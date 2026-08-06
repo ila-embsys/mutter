@@ -32,6 +32,8 @@
 
 struct _MetaKmsUpdate
 {
+  gatomicrefcount ref_count;
+
   MetaKmsDevice *device;
 
   gboolean is_latchable;
@@ -1172,6 +1174,7 @@ meta_kms_update_new (MetaKmsDevice *device)
   MetaKmsUpdate *update;
 
   update = g_new0 (MetaKmsUpdate, 1);
+  g_atomic_ref_count_init (&update->ref_count);
   update->device = device;
   update->is_latchable = TRUE;
   update->sync_fd = -1;
@@ -1179,9 +1182,26 @@ meta_kms_update_new (MetaKmsDevice *device)
   return update;
 }
 
-void
-meta_kms_update_free (MetaKmsUpdate *update)
+MetaKmsUpdate *
+meta_kms_update_ref (MetaKmsUpdate *update)
 {
+  g_atomic_ref_count_inc (&update->ref_count);
+  return update;
+}
+
+void
+meta_kms_update_unref (MetaKmsUpdate *update)
+{
+  if (!g_atomic_ref_count_dec (&update->ref_count))
+    {
+      if (update->impl_device)
+        {
+          meta_kms_impl_device_unhold_fd (update->impl_device);
+          update->impl_device = NULL;
+        }
+      return;
+    }
+
   if (update->impl_device)
     meta_kms_impl_device_unhold_fd (update->impl_device);
 

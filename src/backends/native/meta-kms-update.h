@@ -96,8 +96,10 @@ void meta_kms_feedback_set_ready_time_us (MetaKmsFeedback *feedback,
 META_EXPORT_TEST
 MetaKmsUpdate * meta_kms_update_new (MetaKmsDevice *device);
 
+MetaKmsUpdate * meta_kms_update_ref (MetaKmsUpdate *update);
+
 META_EXPORT_TEST
-void meta_kms_update_free (MetaKmsUpdate *update);
+void meta_kms_update_unref (MetaKmsUpdate *update);
 
 void meta_kms_update_set_flushing (MetaKmsUpdate *update,
                                    MetaKmsCrtc   *crtc);
@@ -171,6 +173,9 @@ int64_t meta_kms_update_get_target_presentation_time (MetaKmsUpdate *update);
 
 void meta_kms_update_set_target_presentation_time (MetaKmsUpdate *update,
                                                    int64_t        target_presentation_time_us);
+
+void meta_kms_plane_assignment_set_buffer (MetaKmsPlaneAssignment *plane_assignment,
+                                           MetaDrmBuffer          *buffer);
 
 void meta_kms_plane_assignment_set_fb_damage (MetaKmsPlaneAssignment *plane_assignment,
                                               const MtkRegion        *region);
@@ -257,4 +262,4 @@ meta_fixed_16_rectangle_to_rectangle (MetaFixed16Rectangle fixed_rect)
                                 meta_fixed_16_from_int (_h))
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (MetaKmsFeedback, meta_kms_feedback_unref)
-G_DEFINE_AUTOPTR_CLEANUP_FUNC (MetaKmsUpdate, meta_kms_update_free)
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (MetaKmsUpdate, meta_kms_update_unref)

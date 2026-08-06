@@ -97,7 +97,7 @@ meta_test_kms_update_sanity (void)
   g_assert_null (meta_kms_update_get_connector_updates (update));
   g_assert_null (meta_kms_update_get_crtc_updates (update));
   g_assert_null (meta_kms_update_get_crtc_color_updates (update));
-  meta_kms_update_free (update);
+  meta_kms_update_unref (update);
 }
 
 static void
@@ -211,7 +211,7 @@ meta_test_kms_update_plane_assignments (void)
   g_assert_nonnull (g_list_find (plane_assignments, primary_plane_assignment));
   g_assert_nonnull (g_list_find (plane_assignments, cursor_plane_assignment));
 
-  meta_kms_update_free (update);
+  meta_kms_update_unref (update);
 }
 
 static void
@@ -261,7 +261,7 @@ meta_test_kms_update_mode_sets (void)
   g_assert_true (mode_set->connectors->data == connector);
   g_assert_true (mode_set->mode == mode);
 
-  meta_kms_update_free (update);
+  meta_kms_update_unref (update);
 }
 
 typedef enum _PageFlipState
@@ -535,7 +535,7 @@ meta_test_kms_update_merge (void)
    */
 
   meta_kms_update_merge_from (update1, update2);
-  meta_kms_update_free (update2);
+  meta_kms_update_unref (update2);
 
   mode_sets = meta_kms_update_get_mode_sets (update1);
   g_assert_cmpuint (g_list_length (mode_sets), ==, 1);
@@ -636,7 +636,7 @@ meta_test_kms_update_merge (void)
   g_assert_true (connector_update->max_bpc.has_update);
   g_assert_cmpuint (connector_update->max_bpc.value, ==, 8);
 
-  meta_kms_update_free (update1);
+  meta_kms_update_unref (update1);
 }
 
 typedef struct _ThreadData

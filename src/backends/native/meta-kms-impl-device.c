@@ -1637,7 +1637,7 @@ do_process (MetaKmsImplDevice *impl_device,
       if (update)
         {
           queue_result_feedback (impl_device, update, feedback);
-          meta_kms_update_free (update);
+          meta_kms_update_unref (update);
         }
 
       return feedback;
@@ -1691,7 +1691,7 @@ do_process (MetaKmsImplDevice *impl_device,
 
   queue_result_feedback (impl_device, update, feedback);
 
-  meta_kms_update_free (update);
+  meta_kms_update_unref (update);
 
   if (changes != META_KMS_RESOURCE_CHANGE_NONE)
     {
@@ -1850,8 +1850,8 @@ crtc_frame_free (CrtcFrame *crtc_frame)
 {
   g_clear_fd (&crtc_frame->deadline.timer_fd, NULL);
   g_clear_pointer (&crtc_frame->deadline.source, g_source_destroy);
-  g_clear_pointer (&crtc_frame->pending_update, meta_kms_update_free);
-  g_clear_pointer (&crtc_frame->submitted_update.kms_update, meta_kms_update_free);
+  g_clear_pointer (&crtc_frame->pending_update, meta_kms_update_unref);
+  g_clear_pointer (&crtc_frame->submitted_update.kms_update, meta_kms_update_unref);
   g_clear_pointer (&crtc_frame->submitted_update.source, g_source_destroy);
   g_free (crtc_frame);
 }
@@ -1966,7 +1966,7 @@ queue_update (MetaKmsImplDevice *impl_device,
   if (crtc_frame->pending_update)
     {
       meta_kms_update_merge_from (crtc_frame->pending_update, update);
-      meta_kms_update_free (update);
+      meta_kms_update_unref (update);
     }
   else
     {
@@ -1990,7 +1990,7 @@ meta_kms_impl_device_do_process_update (MetaKmsImplDevice *impl_device,
       if (update != crtc_frame->pending_update)
         {
           meta_kms_update_merge_from (crtc_frame->pending_update, update);
-          meta_kms_update_free (update);
+          meta_kms_update_unref (update);
         }
 
       update = g_steal_pointer (&crtc_frame->pending_update);
@@ -2141,7 +2141,7 @@ do_handle_update (MetaKmsImplDevice *impl_device,
 static void
 inhibited_update_free (InhibitedUpdate *inhibited_update)
 {
-  g_clear_pointer (&inhibited_update->update, meta_kms_update_free);
+  g_clear_pointer (&inhibited_update->update, meta_kms_update_unref);
   g_free (inhibited_update);
 }
 
@@ -2251,7 +2251,7 @@ err:
   feedback = meta_kms_feedback_new_failed (NULL, g_steal_pointer (&error));
   queue_result_feedback (impl_device, update, feedback);
   meta_kms_feedback_unref (feedback);
-  meta_kms_update_free (update);
+  meta_kms_update_unref (update);
 }
 
 void
@@ -2330,7 +2330,7 @@ discard_update (MetaKmsImplDevice  *impl_device,
   feedback = meta_kms_feedback_new_failed (NULL, g_steal_pointer (&error));
   queue_result_feedback (impl_device, *update, feedback);
   meta_kms_feedback_unref (feedback);
-  g_clear_pointer (update, meta_kms_update_free);
+  g_clear_pointer (update, meta_kms_update_unref);
 }
 
 static void
@@ -2399,7 +2399,7 @@ meta_kms_impl_device_process_update (MetaKmsImplDevice *impl_device,
       feedback = meta_kms_feedback_new_failed (NULL, g_steal_pointer (&error));
       queue_result_feedback (impl_device, update, feedback);
 
-      meta_kms_update_free (update);
+      meta_kms_update_unref (update);
       return feedback;
     }
 

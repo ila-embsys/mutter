@@ -48,7 +48,7 @@ meta_frame_native_release (ClutterFrame *frame)
 
   g_clear_fd (&frame_native->sync.fd, NULL);
   g_clear_pointer (&frame_native->damage, mtk_region_unref);
-  g_clear_pointer (&frame_native->kms_update, meta_kms_update_free);
+  g_clear_pointer (&frame_native->kms_update, meta_kms_update_unref);
   g_clear_object (&frame_native->buffer);
   g_clear_object (&frame_native->scanout);
 }

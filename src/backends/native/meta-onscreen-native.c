@@ -2603,7 +2603,7 @@ meta_onscreen_native_finish_frame (CoglOnscreen *onscreen,
       next_kms_update =
         meta_frame_native_ensure_kms_update (next_frame_native, kms_device);
       meta_kms_update_merge_from (next_kms_update, kms_update);
-      meta_kms_update_free (kms_update);
+      meta_kms_update_unref (kms_update);
       clutter_frame_set_result (frame, CLUTTER_FRAME_RESULT_IDLE);
       return;
     }

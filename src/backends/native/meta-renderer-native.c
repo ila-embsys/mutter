@@ -636,7 +636,7 @@ meta_renderer_native_queue_mode_set_update (MetaRendererNative *renderer_native,
     }
 
   meta_kms_update_merge_from (kms_update, new_kms_update);
-  meta_kms_update_free (new_kms_update);
+  meta_kms_update_unref (new_kms_update);
 }
 
 void
@@ -1887,7 +1887,7 @@ meta_renderer_native_init (MetaRendererNative *renderer_native)
   renderer_native->mode_set_updates =
     g_hash_table_new_full (NULL, NULL,
                            NULL,
-                           (GDestroyNotify) meta_kms_update_free);
+                           (GDestroyNotify) meta_kms_update_unref);
 }
 
 static void
