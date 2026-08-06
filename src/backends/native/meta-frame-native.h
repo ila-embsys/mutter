@@ -42,7 +42,14 @@ gboolean meta_frame_native_has_kms_update (MetaFrameNative *frame_native);
 void meta_frame_native_set_buffer (MetaFrameNative *frame_native,
                                    MetaDrmBuffer   *buffer);
 
+META_EXPORT_TEST
 MetaDrmBuffer * meta_frame_native_get_buffer (MetaFrameNative *frame_native);
+
+void meta_frame_native_add_buffer (MetaFrameNative *frame_native,
+                                   MetaDrmBuffer   *buffer);
+
+void meta_frame_native_set_kms_update (MetaFrameNative *frame_native,
+                                       MetaKmsUpdate   *kms_update);
 
 void meta_frame_native_set_scanout (MetaFrameNative *frame_native,
                                     CoglScanout     *scanout);

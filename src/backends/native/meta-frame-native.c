@@ -34,6 +34,8 @@ struct _MetaFrameNative
   MetaDrmBuffer *buffer;
   CoglScanout *scanout;
 
+  GPtrArray *buffers; /* MetaDrmBuffer */
+
   MetaKmsUpdate *kms_update;
 
   MtkRegion *damage;
@@ -51,6 +53,7 @@ meta_frame_native_release (ClutterFrame *frame)
   g_clear_pointer (&frame_native->kms_update, meta_kms_update_unref);
   g_clear_object (&frame_native->buffer);
   g_clear_object (&frame_native->scanout);
+  g_clear_pointer (&frame_native->buffers, g_ptr_array_unref);
 }
 
 MetaFrameNative *
@@ -109,6 +112,25 @@ MetaDrmBuffer *
 meta_frame_native_get_buffer (MetaFrameNative *frame_native)
 {
   return frame_native->buffer;
+}
+
+void
+meta_frame_native_add_buffer (MetaFrameNative *frame_native,
+                              MetaDrmBuffer   *buffer)
+{
+  if (!frame_native->buffers)
+    frame_native->buffers = g_ptr_array_new_with_free_func (g_object_unref);
+
+  g_ptr_array_add (frame_native->buffers, g_object_ref (buffer));
+}
+
+void
+meta_frame_native_set_kms_update (MetaFrameNative *frame_native,
+                                  MetaKmsUpdate   *kms_update)
+{
+  g_return_if_fail (!frame_native->kms_update);
+
+  frame_native->kms_update = kms_update;
 }
 
 void
