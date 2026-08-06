@@ -423,11 +423,6 @@ int                 meta_wayland_surface_get_buffer_width (MetaWaylandSurface *s
 META_EXPORT_TEST
 int                 meta_wayland_surface_get_buffer_height (MetaWaylandSurface *surface);
 
-CoglScanout *       meta_wayland_surface_try_acquire_scanout (MetaWaylandSurface *surface,
-                                                              CoglOnscreen       *onscreen,
-                                                              ClutterStageView   *stage_view);
-
-
 int meta_wayland_surface_get_geometry_scale (MetaWaylandSurface *surface);
 
 META_EXPORT_TEST

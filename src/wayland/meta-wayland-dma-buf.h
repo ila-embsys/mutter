@@ -70,13 +70,6 @@ meta_wayland_drm_syncobj_create_source (MetaWaylandBuffer                *buffer
                                         MetaWaylandDmaBufSourceDispatch   dispatch,
                                         gpointer                          user_data);
 
-CoglScanout *
-meta_wayland_dma_buf_try_acquire_scanout (MetaWaylandBuffer     *buffer,
-                                          CoglOnscreen          *onscreen,
-                                          ClutterStageView      *stage_view,
-                                          const graphene_rect_t *src_rect,
-                                          const MtkRectangle    *dst_rect);
-
 typedef struct _MetaDrmBuffer MetaDrmBuffer;
 
 #include "backends/native/meta-scanout-feedback.h"

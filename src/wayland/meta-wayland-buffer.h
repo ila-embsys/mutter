@@ -71,8 +71,6 @@ struct _MetaWaylandBuffer
     struct wl_shm_buffer *buffer;
   } shm;
 
-  GHashTable *tainted_scanout_onscreens;
-
   GPtrArray *release_points;
 };
 
@@ -94,12 +92,6 @@ gboolean                meta_wayland_buffer_is_y_inverted       (MetaWaylandBuff
 void                    meta_wayland_buffer_process_damage      (MetaWaylandBuffer     *buffer,
                                                                  MetaMultiTexture      *texture,
                                                                  MtkRegion             *region);
-CoglScanout *           meta_wayland_buffer_try_acquire_scanout (MetaWaylandBuffer     *buffer,
-                                                                 CoglOnscreen          *onscreen,
-                                                                 ClutterStageView      *stage_view,
-                                                                 const graphene_rect_t *src_rect,
-                                                                 const MtkRectangle    *dst_rect);
-
 MetaDrmBuffer * meta_wayland_buffer_try_acquire_drm_buffer (MetaWaylandBuffer *buffer,
                                                             CoglOnscreen      *onscreen);
 

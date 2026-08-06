@@ -764,67 +764,12 @@ meta_stage_impl_redraw_view_primary (MetaStageImpl    *stage_impl,
                     frame);
 }
 
-static gboolean
-meta_stage_impl_scanout_view (MetaStageImpl     *stage_impl,
-                              ClutterStageView  *stage_view,
-                              CoglScanout       *scanout,
-                              ClutterFrame      *frame,
-                              GError           **error)
-{
-  MetaStageImplPrivate *priv =
-    meta_stage_impl_get_instance_private (stage_impl);
-  CoglFramebuffer *framebuffer =
-    clutter_stage_view_get_onscreen (stage_view);
-  CoglOnscreen *onscreen;
-  g_autoptr (CoglFrameInfo) frame_info = NULL;
-
-  g_assert (COGL_IS_ONSCREEN (framebuffer));
-
-  onscreen = COGL_ONSCREEN (framebuffer);
-
-  frame_info = cogl_frame_info_new (onscreen, priv->global_frame_counter,
-                                    frame->frame_count);
-  clutter_frame_take_cogl_frame_info (frame, g_object_ref (frame_info));
-
-  if (!cogl_onscreen_direct_scanout (onscreen,
-                                     scanout,
-                                     frame_info,
-                                     frame,
-                                     error))
-    return FALSE;
-
-  priv->global_frame_counter++;
-  return TRUE;
-}
-
 static void
 meta_stage_impl_redraw_view (ClutterStageWindow *stage_window,
                              ClutterStageView   *stage_view,
                              ClutterFrame       *frame)
 {
   MetaStageImpl *stage_impl = META_STAGE_IMPL (stage_window);
-  g_autoptr (CoglScanout) scanout = NULL;
-
-  scanout = clutter_stage_view_take_scanout (stage_view);
-  if (scanout)
-    {
-      g_autoptr (GError) error = NULL;
-
-      if (meta_stage_impl_scanout_view (stage_impl,
-                                        stage_view,
-                                        scanout,
-                                        frame,
-                                        &error))
-        {
-          clutter_stage_view_accumulate_redraw_clip (stage_view);
-          return;
-        }
-
-      if (!g_error_matches (error,
-                            COGL_SCANOUT_ERROR,
-                            COGL_SCANOUT_ERROR_INHIBITED))
-        g_warning ("Failed to scan out client buffer: %s", error->message);
-    }
 
   meta_stage_impl_redraw_view_primary (stage_impl, stage_view, frame);
 }

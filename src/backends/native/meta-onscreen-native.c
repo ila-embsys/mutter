@@ -452,8 +452,6 @@ notify_crtc_presented (MetaKmsCrtc      *kms_crtc,
   CoglFrameInfo *frame_info = clutter_frame_get_cogl_frame_info (frame);
   CoglOnscreen *onscreen = cogl_frame_info_get_onscreen (frame_info);
   MetaOnscreenNative *onscreen_native = META_ONSCREEN_NATIVE (onscreen);
-  MetaFrameNative *frame_native = meta_frame_native_from_frame (frame);
-  MetaDrmBuffer *buffer = meta_frame_native_get_buffer (frame_native);
   MetaCrtc *crtc;
   int64_t frame_counter;
 
@@ -628,99 +626,6 @@ meta_onscreen_native_dummy_power_save_page_flip (CoglOnscreen *onscreen)
    * by displaying the last swap.
    */
   maybe_post_next_frame (onscreen);
-}
-
-static void
-apply_transform (MetaCrtcKms            *crtc_kms,
-                 MetaKmsPlaneAssignment *kms_plane_assignment,
-                 MetaKmsPlane           *kms_plane)
-{
-  MetaCrtc *crtc = META_CRTC (crtc_kms);
-  const MetaCrtcConfig *crtc_config;
-  MtkMonitorTransform hw_transform;
-
-  crtc_config = meta_crtc_get_config (crtc);
-
-  hw_transform = crtc_config->transform;
-  if (!meta_kms_plane_is_transform_handled (kms_plane, hw_transform))
-    hw_transform = MTK_MONITOR_TRANSFORM_NORMAL;
-  if (!meta_kms_plane_is_transform_handled (kms_plane, hw_transform))
-    return;
-
-  meta_kms_plane_update_set_rotation (kms_plane,
-                                      kms_plane_assignment,
-                                      hw_transform);
-}
-
-static void
-apply_color_encoding (MetaKmsPlaneAssignment *kms_plane_assignment,
-                      MetaKmsPlane           *kms_plane)
-{
-  if (!meta_kms_plane_is_color_encoding_handled (kms_plane,
-                                                 META_KMS_PLANE_YCBCR_COLOR_ENCODING_BT709))
-    return;
-
-  meta_kms_plane_update_set_color_encoding (kms_plane,
-                                            kms_plane_assignment,
-                                            META_KMS_PLANE_YCBCR_COLOR_ENCODING_BT709);
-}
-
-static void
-apply_color_range (MetaKmsPlaneAssignment *kms_plane_assignment,
-                   MetaKmsPlane           *kms_plane)
-{
-  if (!meta_kms_plane_is_color_range_handled (kms_plane,
-                                              META_KMS_PLANE_YCBCR_COLOR_RANGE_LIMITED))
-    return;
-
-  meta_kms_plane_update_set_color_range (kms_plane,
-                                         kms_plane_assignment,
-                                         META_KMS_PLANE_YCBCR_COLOR_RANGE_LIMITED);
-}
-
-static MetaKmsPlaneAssignment *
-assign_primary_plane (MetaCrtcKms            *crtc_kms,
-                      MetaDrmBuffer          *buffer,
-                      MetaKmsUpdate          *kms_update,
-                      MetaKmsAssignPlaneFlag  flags,
-                      const graphene_rect_t  *src_rect,
-                      const MtkRectangle     *dst_rect)
-{
-  MetaCrtc *crtc = META_CRTC (crtc_kms);
-  MetaFixed16Rectangle src_rect_fixed16;
-  MetaKmsCrtc *kms_crtc;
-  MetaKmsPlane *primary_kms_plane;
-  MetaKmsPlaneAssignment *plane_assignment;
-
-  src_rect_fixed16 = (MetaFixed16Rectangle) {
-    .x = meta_fixed_16_from_double (src_rect->origin.x),
-    .y = meta_fixed_16_from_double (src_rect->origin.y),
-    .width = meta_fixed_16_from_double (src_rect->size.width),
-    .height = meta_fixed_16_from_double (src_rect->size.height),
-  };
-
-  meta_topic (META_DEBUG_KMS,
-              "Assigning buffer to primary plane update on CRTC "
-              "(%" G_GUINT64_FORMAT ") with src rect %f,%f %fx%f "
-              "and dst rect %d,%d %dx%d",
-              meta_crtc_get_id (crtc), src_rect->origin.x, src_rect->origin.y,
-              src_rect->size.width, src_rect->size.height,
-              dst_rect->x, dst_rect->y, dst_rect->width, dst_rect->height);
-
-  kms_crtc = meta_crtc_kms_get_kms_crtc (crtc_kms);
-  primary_kms_plane = meta_crtc_kms_get_assigned_primary_plane (crtc_kms);
-  plane_assignment = meta_kms_update_assign_plane (kms_update,
-                                                   kms_crtc,
-                                                   primary_kms_plane,
-                                                   buffer,
-                                                   src_rect_fixed16,
-                                                   *dst_rect,
-                                                   flags);
-  apply_transform (crtc_kms, plane_assignment, primary_kms_plane);
-  apply_color_encoding (plane_assignment, primary_kms_plane);
-  apply_color_range (plane_assignment, primary_kms_plane);
-
-  return plane_assignment;
 }
 
 static void
@@ -1556,10 +1461,6 @@ static const MetaKmsResultListenerVtable swap_buffer_result_listener_vtable = {
 };
 
 static void
-scanout_result_feedback (const MetaKmsFeedback *kms_feedback,
-                         gpointer               user_data);
-
-static void
 meta_onscreen_native_queue_damage_region (CoglOnscreen    *onscreen,
                                           const MtkRegion *region)
 {
@@ -2063,144 +1964,6 @@ maybe_post_next_frame (CoglOnscreen *onscreen)
 post_failed:
   frame_info->flags |= COGL_FRAME_INFO_FLAG_SYMBOLIC;
   notify_frame_info_complete (frame_info);
-}
-
-gboolean
-meta_onscreen_native_is_buffer_scanout_compatible (CoglOnscreen *onscreen,
-                                                   CoglScanout  *scanout)
-{
-  MetaOnscreenNative *onscreen_native = META_ONSCREEN_NATIVE (onscreen);
-  MetaCrtc *crtc = onscreen_native->crtc;
-  MetaCrtcKms *crtc_kms = META_CRTC_KMS (crtc);
-  MetaGpuKms *gpu_kms;
-  MetaKmsDevice *kms_device;
-  MetaKmsCrtc *kms_crtc;
-  MetaKmsUpdate *test_update;
-  MetaDrmBuffer *buffer;
-  g_autoptr (MetaKmsFeedback) kms_feedback = NULL;
-  MetaKmsFeedbackResult result;
-  graphene_rect_t src_rect;
-  MtkRectangle dst_rect;
-
-  gpu_kms = META_GPU_KMS (meta_crtc_get_gpu (crtc));
-  kms_device = meta_gpu_kms_get_kms_device (gpu_kms);
-  kms_crtc = meta_crtc_kms_get_kms_crtc (crtc_kms);
-
-  test_update = meta_kms_update_new (kms_device);
-
-  cogl_scanout_get_src_rect (scanout, &src_rect);
-  cogl_scanout_get_dst_rect (scanout, &dst_rect);
-
-  buffer = META_DRM_BUFFER (cogl_scanout_get_buffer (scanout));
-  assign_primary_plane (crtc_kms,
-                        buffer,
-                        test_update,
-                        META_KMS_ASSIGN_PLANE_FLAG_DISABLE_IMPLICIT_SYNC,
-                        &src_rect,
-                        &dst_rect);
-
-  meta_topic (META_DEBUG_KMS,
-              "Posting direct scanout test update for CRTC %u (%s) synchronously",
-              meta_kms_crtc_get_id (kms_crtc),
-              meta_kms_device_get_path (kms_device));
-
-  kms_feedback =
-    meta_kms_device_process_update_sync (kms_device, test_update,
-                                         META_KMS_UPDATE_FLAG_TEST_ONLY);
-
-  result = meta_kms_feedback_get_result (kms_feedback);
-  return result == META_KMS_FEEDBACK_PASSED;
-}
-
-gboolean
-meta_onscreen_native_supports_direct_scanout (CoglOnscreen *onscreen)
-{
-  MetaOnscreenNative *onscreen_native = META_ONSCREEN_NATIVE (onscreen);
-
-  return !onscreen_native->secondary_gpu_state;
-}
-
-static void
-scanout_result_feedback (const MetaKmsFeedback *kms_feedback,
-                         gpointer               user_data)
-{
-  ClutterFrame *frame = user_data;
-  CoglFrameInfo *frame_info = clutter_frame_get_cogl_frame_info (frame);
-  CoglOnscreen *onscreen = cogl_frame_info_get_onscreen (frame_info);
-  MetaOnscreenNative *onscreen_native = META_ONSCREEN_NATIVE (onscreen);
-  const GError *error = NULL;
-
-  error = meta_kms_feedback_get_error (kms_feedback);
-  if (!error)
-    {
-      if (frame_info->kms_ready_time_us == 0)
-        {
-          frame_info->kms_ready_time_us =
-            meta_kms_feedback_get_ready_time_us (kms_feedback);
-        }
-
-      return;
-    }
-
-  if (!g_error_matches (error,
-                        G_IO_ERROR,
-                        G_IO_ERROR_PERMISSION_DENIED))
-    {
-      ClutterStageView *view = CLUTTER_STAGE_VIEW (onscreen_native->view);
-      MetaFrameNative *frame_native = meta_frame_native_from_frame (frame);
-      CoglScanout *scanout = meta_frame_native_get_scanout (frame_native);
-
-      g_warning ("Direct scanout page flip failed: %s", error->message);
-
-      cogl_scanout_notify_failed (scanout, onscreen);
-      if (onscreen_native->next_frame == NULL && view != NULL)
-        {
-          clutter_stage_view_add_redraw_clip (view, NULL);
-          clutter_stage_view_schedule_update_now (view);
-        }
-    }
-
-  frame_info->flags |= COGL_FRAME_INFO_FLAG_SYMBOLIC;
-
-  notify_frame_info_complete (frame_info);
-  meta_onscreen_native_clear_posted_fb (onscreen);
-}
-
-static gboolean
-meta_onscreen_native_direct_scanout (CoglOnscreen   *onscreen,
-                                     CoglScanout    *scanout,
-                                     CoglFrameInfo  *frame_info,
-                                     gpointer        user_data,
-                                     GError        **error)
-{
-  MetaOnscreenNative *onscreen_native = META_ONSCREEN_NATIVE (onscreen);
-  MetaGpuKms *render_gpu = onscreen_native->render_gpu;
-  CoglFramebuffer *framebuffer = COGL_FRAMEBUFFER (onscreen);
-  CoglContext *cogl_context = cogl_framebuffer_get_context (framebuffer);
-  CoglRenderer *cogl_renderer = cogl_context_get_renderer (cogl_context);
-  MetaRendererNativeGpuData *renderer_gpu_data =
-    meta_renderer_egl_get_renderer_gpu_data (META_RENDERER_EGL (cogl_renderer));
-  MetaRendererNative *renderer_native = renderer_gpu_data->renderer_native;
-  ClutterFrame *frame = user_data;
-  MetaFrameNative *frame_native = meta_frame_native_from_frame (frame);
-
-  renderer_gpu_data = meta_renderer_native_get_gpu_data (renderer_native,
-                                                         render_gpu);
-
-  g_warn_if_fail (renderer_gpu_data->mode == META_RENDERER_NATIVE_MODE_GBM);
-
-  assign_next_frame (onscreen_native, frame);
-
-  meta_frame_native_set_scanout (frame_native, scanout);
-  meta_frame_native_set_buffer (frame_native,
-                                META_DRM_BUFFER (cogl_scanout_get_buffer (scanout)));
-  g_set_object (&onscreen_native->current_primary_buffer,
-                META_DRM_BUFFER (cogl_scanout_get_buffer (scanout)));
-
-  clutter_frame_set_result (frame, CLUTTER_FRAME_RESULT_PENDING_PRESENTED);
-
-  maybe_post_next_frame (onscreen);
-  return TRUE;
 }
 
 static void
@@ -3848,7 +3611,6 @@ meta_onscreen_native_class_init (MetaOnscreenNativeClass *klass)
     meta_onscreen_native_queue_damage_region;
   onscreen_class->swap_buffers_with_damage =
     meta_onscreen_native_swap_buffers_with_damage;
-  onscreen_class->direct_scanout = meta_onscreen_native_direct_scanout;
   onscreen_class->get_window_handles = meta_onscreen_native_get_window_handles;
   onscreen_class->get_buffer_age = meta_onscreen_native_get_buffer_age;
 }

@@ -63,10 +63,6 @@
 #include "compositor/meta-multi-texture-format-private.h"
 #include "wayland/meta-wayland-linux-drm-syncobj.h"
 
-#include "backends/native/meta-drm-buffer-gbm.h"
-#include "backends/native/meta-kms-utils.h"
-#include "backends/native/meta-onscreen-native.h"
-#include "backends/native/meta-renderer-native.h"
 
 #define META_WAYLAND_SHM_MAX_PLANES 4
 
@@ -543,45 +539,6 @@ egl_image_buffer_attach (MetaWaylandBuffer  *buffer,
   return TRUE;
 }
 
-static void
-on_onscreen_destroyed (gpointer  user_data,
-                       GObject  *where_the_onscreen_was)
-{
-  MetaWaylandBuffer *buffer = user_data;
-
-  g_hash_table_remove (buffer->tainted_scanout_onscreens,
-                       where_the_onscreen_was);
-}
-
-static void
-on_scanout_failed (CoglScanout       *scanout,
-                   CoglOnscreen      *onscreen,
-                   MetaWaylandBuffer *buffer)
-{
-  if (!buffer->tainted_scanout_onscreens)
-    buffer->tainted_scanout_onscreens = g_hash_table_new (NULL, NULL);
-
-  if (!g_hash_table_add (buffer->tainted_scanout_onscreens, onscreen))
-    return;
-
-  g_object_weak_ref (G_OBJECT (onscreen), on_onscreen_destroyed, buffer);
-}
-
-static void
-clear_tainted_scanout_onscreens (MetaWaylandBuffer *buffer)
-{
-  GHashTableIter iter;
-  CoglOnscreen *onscreen;
-
-  if (!buffer->tainted_scanout_onscreens)
-    return;
-
-  g_hash_table_iter_init (&iter, buffer->tainted_scanout_onscreens);
-  while (g_hash_table_iter_next (&iter, (gpointer *) &onscreen, NULL))
-    g_object_weak_unref (G_OBJECT (onscreen), on_onscreen_destroyed, buffer);
-  g_hash_table_remove_all (buffer->tainted_scanout_onscreens);
-}
-
 /**
  * meta_wayland_buffer_attach:
  * @buffer: a pointer to a #MetaWaylandBuffer
@@ -607,8 +564,6 @@ meta_wayland_buffer_attach (MetaWaylandBuffer  *buffer,
                             GError            **error)
 {
   COGL_TRACE_BEGIN_SCOPED (MetaWaylandBufferAttach, "Meta::WaylandBuffer::attach()");
-
-  clear_tainted_scanout_onscreens (buffer);
 
   if (!meta_wayland_buffer_is_realized (buffer))
     {
@@ -824,140 +779,6 @@ meta_wayland_buffer_process_damage (MetaWaylandBuffer *buffer,
     g_warning ("Failed to process Wayland buffer damage: %s", error->message);
 }
 
-static CoglScanout *
-try_acquire_egl_image_scanout (MetaWaylandBuffer     *buffer,
-                               CoglOnscreen          *onscreen,
-                               const graphene_rect_t *src_rect,
-                               const MtkRectangle    *dst_rect)
-{
-  MetaContext *context =
-    meta_wayland_compositor_get_context (buffer->compositor);
-  MetaBackend *backend = meta_context_get_backend (context);
-  MetaRenderer *renderer = meta_backend_get_renderer (backend);
-  MetaRendererNative *renderer_native = META_RENDERER_NATIVE (renderer);
-  MetaGpuKms *gpu_kms;
-  MetaDeviceFile *device_file;
-  struct gbm_device *gbm_device;
-  struct gbm_bo *gbm_bo;
-  MetaDrmBufferFlags flags;
-  g_autoptr (MetaDrmBufferGbm) fb = NULL;
-  g_autoptr (CoglScanout) scanout = NULL;
-  g_autoptr (GError) error = NULL;
-
-  if (!buffer->resource)
-    return NULL;
-
-  gpu_kms = meta_renderer_native_get_primary_gpu (renderer_native);
-  device_file = meta_renderer_native_get_primary_device_file (renderer_native);
-  gbm_device = meta_gbm_device_from_gpu (gpu_kms);
-
-  gbm_bo = gbm_bo_import (gbm_device,
-                          GBM_BO_IMPORT_WL_BUFFER, buffer->resource,
-                          GBM_BO_USE_SCANOUT);
-  if (!gbm_bo)
-    return NULL;
-
-  flags = META_DRM_BUFFER_FLAG_NONE;
-  if (gbm_bo_get_modifier (gbm_bo) == DRM_FORMAT_MOD_INVALID)
-    flags |= META_DRM_BUFFER_FLAG_DISABLE_MODIFIERS;
-
-  fb = meta_drm_buffer_gbm_new_take (device_file, gbm_bo, flags, &error);
-  if (!fb)
-    {
-      g_debug ("Failed to create scanout buffer: %s", error->message);
-      gbm_bo_destroy (gbm_bo);
-      return NULL;
-    }
-
-  scanout = cogl_scanout_new (COGL_SCANOUT_BUFFER (g_steal_pointer (&fb)),
-                              dst_rect);
-  cogl_scanout_set_src_rect (scanout, src_rect);
-  if (!meta_onscreen_native_is_buffer_scanout_compatible (onscreen, scanout))
-    return NULL;
-
-  return g_steal_pointer (&scanout);
-}
-
-static void
-scanout_buffer_disposed (gpointer  data,
-                         GObject  *where_the_object_was)
-{
-  MetaWaylandBuffer *buffer = data;
-
-  meta_wayland_buffer_dec_use_count (buffer);
-  g_object_unref (buffer);
-}
-
-CoglScanout *
-meta_wayland_buffer_try_acquire_scanout (MetaWaylandBuffer     *buffer,
-                                         CoglOnscreen          *onscreen,
-                                         ClutterStageView      *stage_view,
-                                         const graphene_rect_t *src_rect,
-                                         const MtkRectangle    *dst_rect)
-{
-  CoglScanout *scanout = NULL;
-  CoglScanoutBuffer *scanout_buffer;
-
-  COGL_TRACE_BEGIN_SCOPED (MetaWaylandBufferTryScanout,
-                           "Meta::WaylandBuffer::try_acquire_scanout()");
-
-  if (buffer->tainted_scanout_onscreens &&
-      g_hash_table_lookup (buffer->tainted_scanout_onscreens, onscreen))
-    {
-      meta_topic (META_DEBUG_RENDER, "Buffer scanout capability tainted");
-      return NULL;
-    }
-
-  switch (buffer->type)
-    {
-    case META_WAYLAND_BUFFER_TYPE_SHM:
-    case META_WAYLAND_BUFFER_TYPE_SINGLE_PIXEL:
-      meta_topic (META_DEBUG_RENDER,
-                  "Buffer type not scanout compatible");
-      return NULL;
-    case META_WAYLAND_BUFFER_TYPE_EGL_IMAGE:
-      if (src_rect || dst_rect)
-        {
-          meta_topic (META_DEBUG_RENDER,
-                      "Buffer type does not support scaling operations");
-          return NULL;
-        }
-      scanout = try_acquire_egl_image_scanout (buffer,
-                                               onscreen,
-                                               src_rect,
-                                               dst_rect);
-      break;
-    case META_WAYLAND_BUFFER_TYPE_DMA_BUF:
-      {
-        scanout = meta_wayland_dma_buf_try_acquire_scanout (buffer,
-                                                            onscreen,
-                                                            stage_view,
-                                                            src_rect,
-                                                            dst_rect);
-        break;
-      }
-    case META_WAYLAND_BUFFER_TYPE_UNKNOWN:
-      g_warn_if_reached ();
-      return NULL;
-    }
-
-  if (!scanout)
-    return NULL;
-
-  g_signal_connect (scanout, "scanout-failed",
-                    G_CALLBACK (on_scanout_failed), buffer);
-
-  g_object_ref (buffer);
-  meta_wayland_buffer_inc_use_count (buffer);
-
-  scanout_buffer = cogl_scanout_get_buffer (scanout);
-  g_object_weak_ref (G_OBJECT (scanout_buffer),
-                     scanout_buffer_disposed,
-                     buffer);
-
-  return scanout;
-}
-
 MetaDrmBuffer *
 meta_wayland_buffer_try_acquire_drm_buffer (MetaWaylandBuffer *buffer,
                                             CoglOnscreen      *onscreen)
@@ -992,8 +813,6 @@ meta_wayland_buffer_finalize (GObject *object)
   g_warn_if_fail (buffer->use_count == 0);
   g_warn_if_fail (!buffer->resource);
 
-  clear_tainted_scanout_onscreens (buffer);
-  g_clear_pointer (&buffer->tainted_scanout_onscreens, g_hash_table_unref);
   g_clear_pointer (&buffer->release_points, g_ptr_array_unref);
 
   g_clear_object (&buffer->egl_image.texture);
