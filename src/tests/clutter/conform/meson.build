@@ -40,6 +40,7 @@ endif
 
 clutter_conform_tests_general_tests = [
   'binding-pool',
+  'offload-plan',
   'event-delivery',
   'color-pipeline',
   'color-state-transform',
