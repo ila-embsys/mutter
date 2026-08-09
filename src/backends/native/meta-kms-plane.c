@@ -63,6 +63,8 @@ struct _MetaKmsPlane
   MetaKmsPlanePropTable prop_table;
 
   MetaKmsDevice *device;
+
+  MetaKmsCrtc *assigned_crtc;
 };
 
 #ifndef HAVE_DRM_PLANE_SIZE_HINT
@@ -747,6 +749,73 @@ init_properties (MetaKmsPlane            *plane,
   };
 }
 
+MetaKmsCrtc *
+meta_kms_plane_get_assigned_crtc (MetaKmsPlane *plane)
+{
+  return plane->assigned_crtc;
+}
+
+void
+meta_kms_plane_predict_state_in_impl (MetaKmsPlane  *plane,
+                                      MetaKmsUpdate *update)
+{
+  GList *l;
+
+  for (l = meta_kms_update_get_plane_assignments (update); l; l = l->next)
+    {
+      MetaKmsPlaneAssignment *plane_assignment = l->data;
+
+      if (plane_assignment->plane != plane)
+        continue;
+
+      if (plane_assignment->buffer)
+        plane->assigned_crtc = plane_assignment->crtc;
+      else
+        plane->assigned_crtc = NULL;
+
+      return;
+    }
+}
+
+static MetaKmsCrtc *
+find_crtc_by_id (MetaKmsImplDevice *impl_device,
+                 uint32_t           crtc_id)
+{
+  GList *l;
+
+  for (l = meta_kms_impl_device_peek_crtcs (impl_device); l; l = l->next)
+    {
+      MetaKmsCrtc *crtc = l->data;
+
+      if (meta_kms_crtc_get_id (crtc) == crtc_id)
+        return crtc;
+    }
+
+  return NULL;
+}
+
+void
+meta_kms_plane_read_assigned_crtc (MetaKmsPlane      *plane,
+                                   MetaKmsImplDevice *impl_device)
+{
+  int fd;
+  drmModePlane *drm_plane;
+
+  if (plane->is_fake)
+    return;
+
+  fd = meta_kms_impl_device_get_fd (impl_device);
+  drm_plane = drmModeGetPlane (fd, plane->id);
+  if (!drm_plane)
+    return;
+
+  plane->assigned_crtc = NULL;
+  if (drm_plane->crtc_id)
+    plane->assigned_crtc = find_crtc_by_id (impl_device, drm_plane->crtc_id);
+
+  drmModeFreePlane (drm_plane);
+}
+
 MetaKmsPlane *
 meta_kms_plane_new (MetaKmsPlaneType         type,
                     MetaKmsImplDevice       *impl_device,
@@ -769,6 +838,9 @@ meta_kms_plane_new (MetaKmsPlaneType         type,
   init_properties (plane, impl_device, drm_plane, drm_plane_props);
 
   meta_kms_plane_read_state (plane, impl_device, drm_plane, drm_plane_props);
+
+  if (drm_plane->crtc_id)
+    plane->assigned_crtc = find_crtc_by_id (impl_device, drm_plane->crtc_id);
 
   return plane;
 }

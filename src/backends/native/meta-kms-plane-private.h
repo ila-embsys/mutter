@@ -90,3 +90,9 @@ uint64_t meta_kms_plane_get_prop_drm_value (MetaKmsPlane     *plane,
 
 MetaKmsPropType meta_kms_plane_get_prop_internal_type (MetaKmsPlane     *plane,
                                                        MetaKmsPlaneProp  prop);
+
+void meta_kms_plane_predict_state_in_impl (MetaKmsPlane  *plane,
+                                           MetaKmsUpdate *update);
+
+void meta_kms_plane_read_assigned_crtc (MetaKmsPlane      *plane,
+                                        MetaKmsImplDevice *impl_device);

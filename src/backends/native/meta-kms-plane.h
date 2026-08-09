@@ -107,4 +107,6 @@ void meta_kms_plane_update_set_color_range (MetaKmsPlane                *plane,
                                             MetaKmsPlaneAssignment      *plane_assignment,
                                             MetaKmsPlaneYCbCrColorRange  range);
 
+MetaKmsCrtc * meta_kms_plane_get_assigned_crtc (MetaKmsPlane *plane);
+
 const char * meta_kms_plane_type_to_string (MetaKmsPlaneType plane_type);

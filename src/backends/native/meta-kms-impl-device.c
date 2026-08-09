@@ -1188,6 +1188,13 @@ meta_kms_impl_device_update_states (MetaKmsImplDevice *impl_device,
       changes |= meta_kms_crtc_update_state_in_impl (crtc);
     }
 
+  for (l = priv->planes; l; l = l->next)
+    {
+      MetaKmsPlane *plane = l->data;
+
+      meta_kms_plane_read_assigned_crtc (plane, impl_device);
+    }
+
   meta_thread_uninhibit_realtime_in_impl (thread);
 
   drmModeFreeResources (drm_resources);
@@ -1217,6 +1224,10 @@ meta_kms_impl_device_predict_states (MetaKmsImplDevice *impl_device,
 
   g_list_foreach (priv->crtcs,
                   (GFunc) meta_kms_crtc_predict_state_in_impl,
+                  update);
+
+  g_list_foreach (priv->planes,
+                  (GFunc) meta_kms_plane_predict_state_in_impl,
                   update);
 
   for (l = priv->connectors; l; l = l->next)
