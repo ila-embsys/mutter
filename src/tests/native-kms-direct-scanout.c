@@ -250,10 +250,10 @@ meta_test_kms_render_client_scanout_fail_twice (void)
 
   /* Expect the first scanout to fail. */
   g_test_expect_message ("libmutter", G_LOG_LEVEL_WARNING,
-                         "*Direct scanout page flip failed*");
+                         "*Page flip failed*");
 
   g_test_expect_message ("libmutter", G_LOG_LEVEL_WARNING,
-                         "*Direct scanout page flip failed*");
+                         "*Page flip failed*");
 
   meta_inhibit_kms_updates (kms_device, META_KMS_INHIBIT_NONE);
 

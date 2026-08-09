@@ -2543,7 +2543,7 @@ finish_frame_result_feedback (const MetaKmsFeedback *kms_feedback,
       !g_error_matches (error,
                         META_KMS_ERROR,
                         META_KMS_ERROR_EMPTY_UPDATE))
-    g_warning ("Cursor update failed: %s", error->message);
+    g_warning ("Page flip failed: %s", error->message);
 
   frame_info->flags |= COGL_FRAME_INFO_FLAG_SYMBOLIC;
 

@@ -460,7 +460,7 @@ meta_test_kms_render_client_scanout_fallback (void)
   clutter_actor_queue_redraw (CLUTTER_ACTOR (stage));
 
   g_test_expect_message ("libmutter", G_LOG_LEVEL_WARNING,
-                         "*Direct scanout page flip failed*");
+                         "*Page flip failed*");
 
   g_main_loop_run (test.loop);
   g_main_loop_unref (test.loop);
@@ -619,7 +619,7 @@ meta_test_kms_render_client_scanout_hotplug (void)
   clutter_actor_queue_redraw (CLUTTER_ACTOR (stage));
 
   g_test_expect_message ("libmutter", G_LOG_LEVEL_WARNING,
-                         "*Direct scanout page flip failed*");
+                         "*Page flip failed*");
 
   g_assert_cmpuint (test.scanout.fb_id, ==, 0);
   while (!test.scanout.fb_id)
