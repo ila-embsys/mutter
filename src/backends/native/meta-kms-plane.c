@@ -209,6 +209,32 @@ meta_kms_plane_update_set_color_range (MetaKmsPlane                *plane,
     meta_kms_plane_assignment_set_color_range (plane_assignment, range);
 }
 
+MetaKmsPlaneZPos
+meta_kms_plane_get_zpos (MetaKmsPlane   *plane)
+{
+  MetaKmsProp *prop =
+    &plane->prop_table.props[META_KMS_PLANE_PROP_ZPOS];
+
+  return (MetaKmsPlaneZPos) {
+    .zpos     = (uint32_t) prop->value,
+    .min_zpos = (uint32_t) prop->range_min,
+    .max_zpos = (uint32_t) prop->range_max
+  };
+}
+
+void
+meta_kms_plane_update_set_zpos  (MetaKmsPlane           *plane,
+                                 MetaKmsPlaneAssignment *plane_assignment,
+                                 uint32_t                zpos)
+{
+  if (plane->type != META_KMS_PLANE_TYPE_OVERLAY)
+    return;
+
+  g_return_if_fail (meta_kms_plane_is_zpos_in_range (plane, zpos));
+
+  meta_kms_plane_assignment_set_zpos (plane_assignment, zpos);
+}
+
 gboolean
 meta_kms_plane_is_transform_handled (MetaKmsPlane        *plane,
                                      MtkMonitorTransform  transform)
@@ -259,6 +285,16 @@ meta_kms_plane_is_color_range_handled (MetaKmsPlane                *plane,
     &plane->prop_table.props[META_KMS_PLANE_PROP_YCBCR_COLOR_RANGE];
 
   return prop->supported_variants & (1 << range);
+}
+
+gboolean
+meta_kms_plane_is_zpos_in_range (MetaKmsPlane  *plane,
+                                 uint32_t       zpos)
+{
+  MetaKmsProp *prop =
+    &plane->prop_table.props[META_KMS_PLANE_PROP_ZPOS];
+
+  return zpos >= prop->range_min && zpos <= prop->range_max;
 }
 
 gboolean
@@ -688,6 +724,11 @@ init_properties (MetaKmsPlane            *plane,
           .enum_values = prop_table->color_ranges,
           .num_enum_values = META_KMS_PLANE_YCBCR_COLOR_RANGE_N_PROPS,
           .default_value = META_KMS_PLANE_YCBCR_COLOR_RANGE_LIMITED,
+        },
+      [META_KMS_PLANE_PROP_ZPOS] =
+        {
+          .name = "zpos",
+          .type = DRM_MODE_PROP_RANGE,
         },
     },
     .rotation_bitmask = {

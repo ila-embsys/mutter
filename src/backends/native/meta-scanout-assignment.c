@@ -162,6 +162,13 @@ plane_assignment_add_to_update (const PlaneAssignment *self,
                                   self->dst_rect,
                                   self->flags);
 
+  if (meta_kms_plane_is_zpos_in_range (self->plane, self->zpos))
+    {
+      meta_kms_plane_update_set_zpos (self->plane,
+                                      kms_plane_assignment,
+                                      self->zpos);
+    }
+
   if (meta_kms_plane_is_transform_handled (self->plane, self->hw_transform))
     {
       meta_kms_plane_update_set_rotation (self->plane,

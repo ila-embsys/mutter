@@ -37,6 +37,7 @@ typedef struct _PlaneAssignment
   MtkMonitorTransform hw_transform;
   MetaKmsPlaneYCbCrColorEncoding color_encoding;
   MetaKmsPlaneYCbCrColorRange color_range;
+  unsigned int zpos;
 
   MetaWaylandSurface *surface;     /* (owned) (nullable) NULL for composited primary */
   MetaSurfaceActor *surface_actor; /* (unowned) (nullable) NULL for composited primary */

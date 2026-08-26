@@ -55,6 +55,13 @@ typedef struct _MetaKmsPlaneCursorSizeHints
   uint64_t *cursor_height;
 } MetaKmsPlaneCursorSizeHints;
 
+typedef struct _MetaKmsPlaneZPos
+{
+  uint32_t zpos;
+  uint32_t min_zpos;
+  uint32_t max_zpos;
+} MetaKmsPlaneZPos;
+
 #define META_TYPE_KMS_PLANE meta_kms_plane_get_type ()
 META_EXPORT_TEST
 G_DECLARE_FINAL_TYPE (MetaKmsPlane, meta_kms_plane,
@@ -81,6 +88,9 @@ gboolean meta_kms_plane_is_color_encoding_handled (MetaKmsPlane                 
 gboolean meta_kms_plane_is_color_range_handled (MetaKmsPlane                *plane,
                                                 MetaKmsPlaneYCbCrColorRange  range);
 
+gboolean meta_kms_plane_is_zpos_in_range (MetaKmsPlane  *plane,
+                                          uint32_t       zpos);
+
 gboolean meta_kms_plane_supports_cursor_hotspot (MetaKmsPlane *plane);
 
 GArray * meta_kms_plane_get_modifiers_for_format (MetaKmsPlane *plane,
@@ -106,6 +116,12 @@ void meta_kms_plane_update_set_color_encoding (MetaKmsPlane                   *p
 void meta_kms_plane_update_set_color_range (MetaKmsPlane                *plane,
                                             MetaKmsPlaneAssignment      *plane_assignment,
                                             MetaKmsPlaneYCbCrColorRange  range);
+
+MetaKmsPlaneZPos meta_kms_plane_get_zpos (MetaKmsPlane   *plane);
+
+void             meta_kms_plane_update_set_zpos (MetaKmsPlane           *plane,
+                                                 MetaKmsPlaneAssignment *plane_assignment,
+                                                 uint32_t                zpos);
 
 MetaKmsCrtc * meta_kms_plane_get_assigned_crtc (MetaKmsPlane *plane);
 

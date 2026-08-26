@@ -714,6 +714,14 @@ meta_kms_plane_assignment_set_color_range (MetaKmsPlaneAssignment      *plane_as
 }
 
 void
+meta_kms_plane_assignment_set_zpos (MetaKmsPlaneAssignment *plane_assignment,
+                                    uint32_t                zpos)
+{
+  plane_assignment->zpos.has_update = TRUE;
+  plane_assignment->zpos.value = zpos;
+}
+
+void
 meta_kms_plane_assignment_set_cursor_hotspot (MetaKmsPlaneAssignment *plane_assignment,
                                               int                     x,
                                               int                     y)

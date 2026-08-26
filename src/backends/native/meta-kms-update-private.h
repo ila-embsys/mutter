@@ -92,6 +92,11 @@ typedef struct _MetaKmsPlaneAssignment
     gboolean has_update;
     MetaKmsPlaneYCbCrColorRange value;
   } color_range;
+
+  struct {
+    gboolean has_update;
+    unsigned int value;
+  } zpos;
 } MetaKmsPlaneAssignment;
 
 typedef struct _MetaKmsModeSet
@@ -192,6 +197,9 @@ void meta_kms_plane_assignment_set_color_encoding (MetaKmsPlaneAssignment       
 
 void meta_kms_plane_assignment_set_color_range (MetaKmsPlaneAssignment      *plane_assignment,
                                                 MetaKmsPlaneYCbCrColorRange  range);
+
+void meta_kms_plane_assignment_set_zpos (MetaKmsPlaneAssignment *plane_assignment,
+                                         uint32_t                zpos);
 
 META_EXPORT_TEST
 MetaKmsPlaneAssignment * meta_kms_update_get_primary_plane_assignment (MetaKmsUpdate *update,

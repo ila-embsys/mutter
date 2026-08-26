@@ -817,6 +817,22 @@ process_plane_assignment (MetaKmsImplDevice  *impl_device,
         return FALSE;
     }
 
+  if (plane_assignment->zpos.has_update)
+    {
+      meta_topic (META_DEBUG_KMS,
+                  "[atomic] Setting plane (%u, %s) zpos to %u",
+                  meta_kms_plane_get_id (plane),
+                  meta_kms_impl_device_get_path (impl_device),
+                  plane_assignment->zpos.value);
+      
+      if (!add_plane_property (impl_device,
+                               plane, req,
+                               META_KMS_PLANE_PROP_ZPOS,
+                               plane_assignment->zpos.value,
+                               error))
+        return FALSE;
+    }
+
   return TRUE;
 }
 

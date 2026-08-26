@@ -90,6 +90,7 @@ build_standin (MetaDrmBuffer    *standin_buffer,
   const MetaCrtcConfig *crtc_config = meta_crtc_get_config (crtc);
   MtkMonitorTransform view_transform;
   MtkMonitorTransform hw_transform;
+  MetaKmsPlane *primary_plane;
   int width, height;
 
   view_transform = clutter_stage_view_get_transform (stage_view);
@@ -112,8 +113,10 @@ build_standin (MetaDrmBuffer    *standin_buffer,
       height = cogl_framebuffer_get_height (framebuffer);
     }
 
+  primary_plane = meta_crtc_kms_get_assigned_primary_plane (crtc_kms);
+
   return (PlaneAssignment) {
-    .plane = meta_crtc_kms_get_assigned_primary_plane (crtc_kms),
+    .plane = primary_plane,
     .buffer = standin_buffer ? g_object_ref (standin_buffer) : NULL,
     .src_rect = GRAPHENE_RECT_INIT (0, 0, width, height),
     .dst_rect = { 0, 0, width, height },
@@ -121,6 +124,7 @@ build_standin (MetaDrmBuffer    *standin_buffer,
     .hw_transform = hw_transform,
     .color_encoding = META_KMS_PLANE_YCBCR_COLOR_ENCODING_BT709,
     .color_range = META_KMS_PLANE_YCBCR_COLOR_RANGE_LIMITED,
+    .zpos = meta_kms_plane_get_zpos (primary_plane).zpos,
   };
 }
 

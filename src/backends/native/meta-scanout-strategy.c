@@ -757,6 +757,7 @@ try_reassign_previous_overlays (ClutterOffloadableActors *offload_actors,
         }
 
       candidate->plane = old->plane;
+      candidate->zpos  = old->zpos;
       n_candidates++;
     }
 
@@ -822,6 +823,7 @@ try_assign_overlay (const ClutterOffloadEntry *offload_entry,
     }
 
   overlay.plane = overlay_plane;
+  overlay.zpos = meta_kms_plane_get_zpos (overlay_plane).zpos;
   scanout_assignment_stage (assignment);
   scanout_assignment_add_overlay (assignment, &overlay);
 
