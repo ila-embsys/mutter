@@ -851,6 +851,23 @@ void                            clutter_actor_inhibit_culling                   
 CLUTTER_EXPORT
 void                            clutter_actor_uninhibit_culling                 (ClutterActor               *actor);
 
+CLUTTER_EXPORT
+void                            clutter_actor_disable_render_hole               (ClutterActor               *actor);
+
+CLUTTER_EXPORT
+void                            clutter_actor_enable_render_hole                (ClutterActor               *actor);
+
+CLUTTER_EXPORT
+gboolean                        clutter_actor_is_render_hole_enabled            (ClutterActor               *actor);
+
+CLUTTER_EXPORT
+void                            clutter_actor_inhibit_render_hole               (ClutterActor               *actor);
+
+CLUTTER_EXPORT
+void                            clutter_actor_uninhibit_render_hole             (ClutterActor               *actor);
+
+CLUTTER_EXPORT
+gboolean                        clutter_actor_is_render_hole_inhibited          (ClutterActor               *actor);
 /**
  * ClutterActorCreateChildFunc:
  * @item: (type GObject): the item in the model

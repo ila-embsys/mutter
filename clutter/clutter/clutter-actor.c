@@ -552,6 +552,8 @@ typedef enum
  * will ask for 3 different preferred size in each allocation cycle */
 #define N_CACHED_SIZE_REQUESTS 3
 
+#define RENDER_HOLE_INHIBITION_INCREMENT_COUNTER 3
+
 struct _ClutterActorPrivate
 {
   ClutterContext *context;
@@ -706,6 +708,10 @@ struct _ClutterActorPrivate
   unsigned int implicitly_grabbed_count;
 
   GArray *next_redraw_clips;
+
+  gboolean render_hole;
+  gboolean render_hole_dirty;
+  unsigned int render_hole_inhibit_counter;
 
   /* bitfields: KEEP AT THE END */
 
@@ -2360,6 +2366,10 @@ absolute_geometry_changed (ClutterActor *actor)
   actor->priv->stage_relative_modelview_valid = FALSE;
 
   actor->priv->needs_finish_layout = TRUE;
+
+  if (actor->priv->render_hole)
+    clutter_actor_inhibit_render_hole (actor);
+
   /* needs_finish_layout is already TRUE on the whole parent tree thanks
    * to queue_update_paint_volume() that was called by transform_changed().
    */
@@ -3557,8 +3567,13 @@ clutter_actor_paint (ClutterActor        *self,
   if (!clutter_actor_is_mapped (self))
     return;
 
-  if (clutter_actor_is_offloaded (self, paint_context))
+  gboolean is_offloaded = clutter_actor_is_offloaded (self, paint_context);
+  gboolean should_render_hole = (priv->render_hole && priv->render_hole_dirty);
+  if (is_offloaded && !should_render_hole)
     return;
+
+  if (should_render_hole)
+    clutter_actor_uninhibit_render_hole (self);
 
 #ifdef HAVE_PROFILER
   COGL_TRACE_SCOPED_ANCHOR (ClutterActorPaint);
@@ -13458,6 +13473,79 @@ clutter_actor_uninhibit_culling (ClutterActor *actor)
   priv->inhibit_culling_counter--;
   if (priv->inhibit_culling_counter == 0)
     _clutter_actor_set_enable_paint_unmapped (actor, FALSE);
+}
+
+void
+clutter_actor_disable_render_hole (ClutterActor *actor)
+{
+  g_return_if_fail (CLUTTER_IS_ACTOR (actor));
+
+  actor->priv->render_hole = FALSE;
+  actor->priv->render_hole_inhibit_counter = 0;
+}
+
+void
+clutter_actor_enable_render_hole (ClutterActor *actor)
+{
+  g_return_if_fail (CLUTTER_IS_ACTOR (actor));
+
+  actor->priv->render_hole = TRUE;
+  clutter_actor_inhibit_render_hole (actor);
+}
+
+gboolean
+clutter_actor_is_render_hole_enabled (ClutterActor *actor)
+{
+  g_return_val_if_fail (CLUTTER_IS_ACTOR (actor), FALSE);
+
+  return actor->priv->render_hole;
+}
+
+void
+clutter_actor_inhibit_render_hole (ClutterActor *actor)
+{
+  ClutterActorPrivate *priv;
+
+  g_return_if_fail (CLUTTER_IS_ACTOR (actor));
+
+  priv = actor->priv;
+
+  priv->render_hole_inhibit_counter += RENDER_HOLE_INHIBITION_INCREMENT_COUNTER;
+  priv->render_hole_dirty = TRUE;
+}
+
+
+void
+clutter_actor_uninhibit_render_hole (ClutterActor *actor)
+{
+  ClutterActorPrivate *priv;
+
+  g_return_if_fail (CLUTTER_IS_ACTOR (actor));
+
+  priv = actor->priv;
+
+  if (priv->render_hole_inhibit_counter == 0)
+    {
+      g_critical ("Unpaired call to clutter_actor_uninhibit_render_hole");
+      return;
+    }
+
+  priv->render_hole_inhibit_counter--;
+
+  if (priv->render_hole_inhibit_counter == 0)
+    priv->render_hole_dirty = FALSE;
+}
+
+gboolean
+clutter_actor_is_render_hole_inhibited (ClutterActor *actor)
+{
+  ClutterActorPrivate *priv;
+
+  g_return_val_if_fail (CLUTTER_IS_ACTOR (actor), FALSE);
+
+  priv = actor->priv;
+
+  return priv->render_hole_inhibit_counter > 0;
 }
 
 /* Allows you to disable applying the actors model view transform during

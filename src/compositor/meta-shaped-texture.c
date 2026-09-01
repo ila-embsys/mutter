@@ -118,6 +118,7 @@ struct _MetaShapedTexture
   int dst_width, dst_height;
 
   int buffer_scale;
+  gboolean render_hole;
 
   guint create_mipmaps : 1;
 
@@ -725,6 +726,7 @@ do_paint_content (MetaShapedTexture   *stex,
   int texture_width, texture_height;
   gboolean debug_paint_opaque_region;
   int n_planes;
+  CoglContext *cogl_context = cogl_context_from_paint_context (paint_context);
 
   meta_shaped_texture_ensure_size_valid (stex);
 
@@ -835,6 +837,25 @@ do_paint_content (MetaShapedTexture   *stex,
     }
 
   n_planes = meta_multi_texture_get_n_planes (paint_tex);
+
+  if (stex->render_hole)
+    {
+      g_autoptr (CoglPipeline) transparent_hole_pipeline = cogl_pipeline_new (cogl_context);
+      CoglColor transparent_color;
+      GError *error;
+
+      cogl_color_init_from_4f (&transparent_color, 0.0f, 0.0f, 0.0f, 0.0f);
+      cogl_pipeline_set_color (transparent_hole_pipeline, &transparent_color);
+      cogl_pipeline_set_blend (transparent_hole_pipeline, "RGBA = ADD(SRC_COLOR, 0)", &error);
+
+      g_autoptr (ClutterPaintNode) hole_node = clutter_pipeline_node_new (transparent_hole_pipeline);
+      clutter_paint_node_set_static_name (hole_node, "MetaShapedTexture (underlay hole)");
+      clutter_paint_node_add_child (root_node, hole_node);
+      clutter_paint_node_add_rectangle (hole_node, alloc);
+
+      g_clear_pointer (&blended_tex_region, mtk_region_unref);
+      return;
+    }
 
   /* First, paint the unblended parts, which are part of the opaque region. */
   if (use_opaque_region)
@@ -1020,6 +1041,7 @@ meta_shaped_texture_paint_content (MetaShapedTexture   *stex,
   opacity = clutter_actor_get_paint_opacity (actor);
   clutter_actor_get_content_box (actor, &alloc);
 
+  stex->render_hole = clutter_actor_is_render_hole_enabled (actor);
   do_paint_content (stex, root_node, paint_context, &alloc, opacity);
 }
 
