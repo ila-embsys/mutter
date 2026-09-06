@@ -21,6 +21,8 @@
 #include <meta/common.h>
 #include <meta/meta-context.h>
 
+#include "tests/meta-vkms-device.h"
+
 typedef enum _MetaContextTestType
 {
   META_CONTEXT_TEST_TYPE_HEADLESS,
@@ -63,3 +65,8 @@ void meta_context_test_wait_for_x11_display (MetaContextTest *context_test);
 META_EXPORT
 void meta_context_test_set_background_color (MetaContextTest *context_test,
                                              CoglColor        color);
+
+META_EXPORT
+void meta_context_test_set_vkms_device_configs (MetaContextTest            *context_test,
+                                                const MetaVkmsDeviceConfig *configs,
+                                                size_t                      n_configs);
