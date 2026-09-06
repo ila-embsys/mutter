@@ -19,6 +19,8 @@
 
 #include "backends/native/meta-kms-impl-device-simple.h"
 
+#include <drm_fourcc.h>
+
 #include "backends/native/meta-backend-native-private.h"
 #include "backends/native/meta-drm-buffer-gbm.h"
 #include "backends/native/meta-kms-connector-private.h"
@@ -1582,6 +1584,52 @@ meta_kms_impl_device_simple_setup_drm_event_context (MetaKmsImplDevice *impl_dev
   drm_event_context->page_flip_handler = page_flip_handler;
 }
 
+/*
+ * Test whether a buffer is compatible with the current CRTC configuration
+ * for a legacy page flip. drmModePageFlip requires an exact format match,
+ * but dispatch_page_flip falls back to drmModeSetCrtc on -EINVAL.
+ * drmModeSetCrtc checks the format and modifier against the plane's
+ * capabilities (drm_plane_has_format), and only checks dimensions via
+ * drm_crtc_check_viewport. Planes without an IN_FORMATS blob accept
+ * any modifier (drm_plane_has_format returns true when modifier_count
+ * is 0).
+ */
+static gboolean
+is_buffer_compatible (MetaKmsPlane  *plane,
+                      MetaDrmBuffer *buffer,
+                      CachedModeSet *cached_mode_set)
+{
+  GArray *modifiers;
+  uint32_t format;
+
+  if (meta_drm_buffer_get_width (buffer) != cached_mode_set->width ||
+      meta_drm_buffer_get_height (buffer) != cached_mode_set->height)
+    return FALSE;
+
+  format = meta_drm_buffer_get_format (buffer);
+  if (!meta_kms_plane_is_format_supported (plane, format))
+    return FALSE;
+
+  modifiers = meta_kms_plane_get_modifiers_for_format (plane, format);
+  if (modifiers)
+    {
+      uint64_t modifier = meta_drm_buffer_get_modifier (buffer);
+
+      if (modifier == DRM_FORMAT_MOD_INVALID)
+        return TRUE;
+
+      for (size_t i = 0; i < modifiers->len; i++)
+        {
+          if (modifier == g_array_index (modifiers, uint64_t, i))
+            return TRUE;
+        }
+
+      return FALSE;
+    }
+
+  return TRUE;
+}
+
 static MetaKmsFeedback *
 perform_update_test (MetaKmsImplDevice *impl_device,
                      MetaKmsUpdate     *update)
@@ -1628,11 +1676,7 @@ perform_update_test (MetaKmsImplDevice *impl_device,
           continue;
         }
 
-      if (meta_drm_buffer_get_width (buffer) != cached_mode_set->width ||
-          meta_drm_buffer_get_height (buffer) != cached_mode_set->height ||
-          meta_drm_buffer_get_stride (buffer) != cached_mode_set->stride ||
-          meta_drm_buffer_get_format (buffer) != cached_mode_set->format ||
-          meta_drm_buffer_get_modifier (buffer) != cached_mode_set->modifier)
+      if (!is_buffer_compatible (plane, buffer, cached_mode_set))
         {
           MetaKmsPlaneFeedback *plane_feedback;
 
