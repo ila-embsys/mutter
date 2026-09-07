@@ -848,6 +848,15 @@ kms_test_cases = [
     'variants': kms_test_variants,
   },
   {
+    'name': 'kms-multi-plane-scanout',
+    'suite': 'backends/native/kms',
+    'sources': [
+      'native-kms-multi-plane-scanout.c',
+      wayland_test_utils,
+    ],
+    'variants': kms_test_variants,
+  },
+  {
     'name': 'kms-device',
     'suite': 'backends/native/kms',
     'sources': [

@@ -39,6 +39,15 @@ wayland_test_clients = [
     'name': 'cursor-shape',
   },
   {
+    'name': 'dma-buf-overlay',
+  },
+  {
+    'name': 'dma-buf-overlay-alpha',
+  },
+  {
+    'name': 'dma-buf-two-overlays',
+  },
+  {
     'name': 'dma-buf-scanout',
   },
   {
