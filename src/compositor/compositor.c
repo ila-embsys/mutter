@@ -1276,7 +1276,17 @@ meta_compositor_dispose (GObject *object)
   MetaCompositor *compositor = META_COMPOSITOR (object);
   MetaCompositorPrivate *priv =
     meta_compositor_get_instance_private (compositor);
-  ClutterActor *stage = meta_backend_get_stage (priv->backend);
+  ClutterStage *stage =
+    CLUTTER_STAGE (meta_backend_get_stage (priv->backend));
+  GList *l;
+
+  for (l = clutter_stage_peek_stage_views (stage); l; l = l->next)
+    {
+      ClutterStageView *stage_view = l->data;
+
+      g_object_set_qdata (G_OBJECT (stage_view),
+                          quark_compositor_view, NULL);
+    }
 
   g_signal_handlers_disconnect_by_func (priv->display->startup_notification,
                                         on_startup_notification_changed,
@@ -1287,9 +1297,11 @@ meta_compositor_dispose (GObject *object)
 
   g_clear_object (&priv->laters);
 
-  g_clear_signal_handler (&priv->stage_presented_id, stage);
-  g_clear_signal_handler (&priv->before_paint_handler_id, stage);
-  g_clear_signal_handler (&priv->after_paint_handler_id, stage);
+  g_clear_signal_handler (&priv->stage_presented_id, CLUTTER_ACTOR (stage));
+  g_clear_signal_handler (&priv->before_paint_handler_id,
+                          CLUTTER_ACTOR (stage));
+  g_clear_signal_handler (&priv->after_paint_handler_id,
+                          CLUTTER_ACTOR (stage));
   g_clear_signal_handler (&priv->window_visibility_updated_id, priv->display);
 
   g_clear_pointer (&priv->windows, g_list_free);
