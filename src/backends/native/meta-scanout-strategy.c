@@ -580,8 +580,9 @@ find_overlay_plane (ScanoutAssignment      *assignment,
 }
 
 static gboolean
-is_surface_in_offload_plan (ClutterOffloadableActors *offload_actors,
-                            MetaSurfaceActor         *surface_actor)
+is_surface_in_offload_plan (ClutterOffloadableActors      *offload_actors,
+                            MetaSurfaceActor              *surface_actor,
+                            const ClutterOffloadEntry    **offload_entry_out)
 {
   size_t n_entries;
 
@@ -596,6 +597,7 @@ is_surface_in_offload_plan (ClutterOffloadableActors *offload_actors,
       if (offload_entry->actor != CLUTTER_ACTOR (surface_actor))
         continue;
 
+      *offload_entry_out = offload_entry;
       return !offload_entry->poisoned &&
              offload_entry->type == CLUTTER_OFFLOAD_TYPE_OPAQUE;
     }
@@ -696,6 +698,43 @@ try_primary_scanout (ClutterOffloadableActors *offload_actors,
 }
 
 static gboolean
+assign_overlay_zpos (const ClutterOffloadEntry  *offload_entry,
+                     ClutterStageView           *stage_view,
+                     ScanoutAssignment          *assignment,
+                     MetaKmsPlane               *overlay_plane,
+                     PlaneAssignment            *overlay,
+                     const uint32_t              primary_zpos,
+                     const uint32_t              underlay_depth)
+{
+  if (!offload_entry)
+    return FALSE;
+
+  if (!overlay_plane)
+    {
+      meta_topic (META_DEBUG_RENDER, "[Mohan] No Overlay Plane to assign zpos");
+      return FALSE;
+    }
+
+  if (offload_entry->occupied)
+    {
+      if (underlay_depth == primary_zpos)
+        {
+          meta_topic (META_DEBUG_RENDER, "[Mohan] Underlay Depth reached!");
+          return FALSE;
+        }
+
+      overlay->zpos = primary_zpos - underlay_depth - 1;
+    }
+  else
+    {
+      MetaKmsPlaneZPos overlay_zpos = meta_kms_plane_get_zpos (overlay_plane);
+      overlay->zpos = overlay_zpos.max_zpos;
+    }
+
+  return TRUE;
+}
+
+static gboolean
 try_reassign_previous_overlays (ClutterOffloadableActors *offload_actors,
                                 ScanoutAssignment        *old_assignment,
                                 GList                    *available_planes,
@@ -703,7 +742,9 @@ try_reassign_previous_overlays (ClutterOffloadableActors *offload_actors,
                                 ClutterStageView         *stage_view,
                                 ScanoutAssignment        *assignment,
                                 ScanoutTryAssignmentFunc  try_func,
-                                gpointer                  try_func_data)
+                                gpointer                  try_func_data,
+                                const uint32_t            primary_zpos,
+                                uint32_t                 *underlay_depth)
 {
   g_autofree PlaneAssignment *candidates = NULL;
   size_t n_old_overlays, n_candidates = 0;
@@ -719,6 +760,7 @@ try_reassign_previous_overlays (ClutterOffloadableActors *offload_actors,
       PlaneAssignment *old;
       PlaneAssignment *candidate;
       MetaSurfaceActor *surface_actor;
+      const ClutterOffloadEntry *offload_entry = NULL;
 
       old = scanout_assignment_get_overlay (old_assignment, i);
       candidate = &candidates[n_candidates];
@@ -726,14 +768,27 @@ try_reassign_previous_overlays (ClutterOffloadableActors *offload_actors,
       surface_actor = meta_wayland_surface_get_actor (old->surface);
       if (!surface_actor)
         continue;
-      if (!is_surface_in_offload_plan (offload_actors, surface_actor))
-        continue;
+      if (!is_surface_in_offload_plan (offload_actors, surface_actor, &offload_entry))
+        {
+          if (offload_entry && offload_entry->poisoned)
+            clutter_actor_disable_render_hole (offload_entry->actor);
+          continue;
+        }
 
       if (!g_list_find (available_planes, old->plane))
         continue;
 
       if (!build_overlay (stage_view, old->surface, candidate))
         continue;
+
+      if (!assign_overlay_zpos (offload_entry,
+                                stage_view, assignment, 
+                                old->plane, candidate,
+                                primary_zpos, *underlay_depth))
+        {
+          plane_assignment_clear (candidate);
+          continue;
+        }
 
       if (!plane_supports_buffer (old->plane, candidate->buffer))
         {
@@ -757,7 +812,15 @@ try_reassign_previous_overlays (ClutterOffloadableActors *offload_actors,
         }
 
       candidate->plane = old->plane;
-      candidate->zpos  = old->zpos;
+      if (offload_entry->occupied)
+        {
+          (*underlay_depth)++;
+          if (!clutter_actor_is_render_hole_enabled (offload_entry->actor))
+              clutter_actor_enable_render_hole (offload_entry->actor);
+        }
+      if (candidate->zpos > primary_zpos && old->zpos < primary_zpos)
+          clutter_actor_disable_render_hole (offload_entry->actor);
+
       n_candidates++;
     }
 
@@ -782,6 +845,20 @@ try_reassign_previous_overlays (ClutterOffloadableActors *offload_actors,
   return TRUE;
 }
 
+static uint32_t
+get_primary_plane_zpos (ClutterStageView *stage_view)
+{
+  MetaRendererView *renderer_view = META_RENDERER_VIEW (stage_view);
+  MetaCrtc *crtc;
+  MetaCrtcKms *crtc_kms;
+  crtc = meta_renderer_view_get_crtc (renderer_view);
+  crtc_kms = META_CRTC_KMS (crtc);
+  MetaKmsPlane *primary_plane = meta_crtc_kms_get_assigned_primary_plane (crtc_kms);
+  MetaKmsPlaneZPos primary_zpos = meta_kms_plane_get_zpos (primary_plane);
+
+  return primary_zpos.zpos;
+}
+
 static gboolean
 try_assign_overlay (const ClutterOffloadEntry *offload_entry,
                     GList                     *available_planes,
@@ -789,7 +866,9 @@ try_assign_overlay (const ClutterOffloadEntry *offload_entry,
                     ClutterStageView          *stage_view,
                     ScanoutAssignment         *assignment,
                     ScanoutTryAssignmentFunc   try_func,
-                    gpointer                   try_func_data)
+                    gpointer                   try_func_data,
+                    const uint32_t             primary_zpos,
+                    uint32_t                  *underlay_depth)
 {
   MetaSurfaceActorWayland *surface_actor_wayland;
   MetaWaylandSurface *surface;
@@ -815,6 +894,15 @@ try_assign_overlay (const ClutterOffloadEntry *offload_entry,
       return FALSE;
     }
 
+   if (!assign_overlay_zpos (offload_entry,
+                             stage_view, assignment, 
+                             overlay_plane, &overlay,
+                             primary_zpos, *underlay_depth))
+    {
+      plane_assignment_clear (&overlay);
+      return FALSE;
+    }
+
   if (is_assignment_failed (failed_assignments,
                             overlay_plane, overlay.buffer))
     {
@@ -823,7 +911,6 @@ try_assign_overlay (const ClutterOffloadEntry *offload_entry,
     }
 
   overlay.plane = overlay_plane;
-  overlay.zpos = meta_kms_plane_get_zpos (overlay_plane).zpos;
   scanout_assignment_stage (assignment);
   scanout_assignment_add_overlay (assignment, &overlay);
 
@@ -831,6 +918,15 @@ try_assign_overlay (const ClutterOffloadEntry *offload_entry,
     {
       scanout_assignment_restore (assignment);
       return FALSE;
+    }
+
+  if (offload_entry->poisoned)
+    {
+      (*underlay_depth)++;
+      if (!clutter_actor_is_render_hole_enabled (offload_entry->actor))
+        {
+          clutter_actor_enable_render_hole (offload_entry->actor);
+        }
     }
 
   scanout_assignment_commit (assignment);
@@ -851,11 +947,14 @@ try_assign_overlays (ClutterOffloadableActors *offload_actors,
 {
   PlaneAssignment *primary;
   size_t n_entries;
+  uint32_t underlay_depth = 0;
+  uint32_t primary_zpos = get_primary_plane_zpos (stage_view);
 
   try_reassign_previous_overlays (offload_actors, old_assignment,
                                   available_planes, failed_assignments,
                                   stage_view,
-                                  assignment, try_func, try_func_data);
+                                  assignment, try_func, try_func_data,
+                                  primary_zpos, &underlay_depth);
 
   primary = scanout_assignment_get_primary (assignment);
   n_entries = clutter_offloadable_actors_get_n_entries (offload_actors);
@@ -898,7 +997,8 @@ try_assign_overlays (ClutterOffloadableActors *offload_actors,
                   i, (double) frequency);
       try_assign_overlay (offload_entry, available_planes,
                           failed_assignments, stage_view,
-                          assignment, try_func, try_func_data);
+                          assignment, try_func, try_func_data,
+                          primary_zpos, &underlay_depth);
     }
 }
 
