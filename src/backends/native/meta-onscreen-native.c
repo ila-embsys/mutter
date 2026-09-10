@@ -2646,10 +2646,11 @@ create_bos_gbm (CoglOnscreen  *onscreen,
 
   if (!should_be_sharable)
     {
-      choose_gbm_format (kms_plane,
+      // TODO Deal with this for underlay support
+      /*choose_gbm_format (kms_plane,
                          alphaless_10bpc_formats,
                          G_N_ELEMENTS (alphaless_10bpc_formats),
-                         &gbm_format);
+                         &gbm_format);*/
     }
 
   if (gbm_format == 0 &&
