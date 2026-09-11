@@ -167,17 +167,19 @@ meta_compositor_view_native_before_paint (MetaCompositorViewNative *view_native,
   MetaSurfaceActor *fullscreen_surface;
   g_autoptr (ClutterOffloadableActors) offload_actors = NULL;
   g_autoptr (MtkRegion) poisoned = NULL;
+  g_autoptr (MtkRegion) occupied = NULL;
 
   stage_view = meta_compositor_view_get_stage_view (compositor_view);
   stage = meta_compositor_get_stage (compositor);
 
   offload_actors = clutter_offloadable_actors_new ();
   poisoned = mtk_region_create ();
+  occupied = mtk_region_create ();
 
   clutter_offloadable_analyze_children (CLUTTER_ACTOR (stage),
                                         stage_view,
                                         offload_actors,
-                                        poisoned);
+                                        poisoned, occupied);
 
   fullscreen_surface = get_fullscreen_surface (offload_actors, stage_view);
   update_fullscreen_surface_tracking (view_native, fullscreen_surface);

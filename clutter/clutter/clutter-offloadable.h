@@ -71,6 +71,7 @@ typedef struct _ClutterOffloadEntry
   ClutterOffloadType type; /* whether the actor is fully opaque or has alpha */
   MtkRegion *region; /* screen-space region covered by the actor */
   gboolean poisoned; /* TRUE if non-offloadable alpha content above prevents standalone offloading */
+  gboolean occupied; /* TRUE if offloadable/non-offloadable non-alpha content overlaps above*/
 } ClutterOffloadEntry;
 
 /*
@@ -94,7 +95,8 @@ void clutter_offloadable_actors_add_entry (ClutterOffloadableActors *actors,
                                            ClutterActor             *actor,
                                            ClutterOffloadType        type,
                                            MtkRegion                *region,
-                                           gboolean                  poisoned);
+                                           gboolean                  poisoned,
+                                           gboolean                  occupied);
 
 CLUTTER_EXPORT
 size_t clutter_offloadable_actors_get_n_entries (ClutterOffloadableActors *actors);
@@ -171,6 +173,7 @@ CLUTTER_EXPORT
 void clutter_offloadable_analyze_children (ClutterActor             *actor,
                                            ClutterStageView         *stage_view,
                                            ClutterOffloadableActors *offloadable_actors,
-                                           MtkRegion                *poisoned_region);
+                                           MtkRegion                *poisoned_region,
+                                           MtkRegion                *occupied_region);
 
 G_END_DECLS

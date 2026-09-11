@@ -103,10 +103,13 @@ offload_plan_add_entries (void)
   g_autoptr (ClutterOffloadableActors) plan = NULL;
   g_autoptr (ClutterActor) actor1 = NULL;
   g_autoptr (ClutterActor) actor2 = NULL;
+  g_autoptr (ClutterActor) actor3 = NULL;
   g_autoptr (MtkRegion) region1 = NULL;
   g_autoptr (MtkRegion) region2 = NULL;
+  g_autoptr (MtkRegion) region3 = NULL;
   MtkRectangle rect1 = { 0, 0, 100, 100 };
   MtkRectangle rect2 = { 50, 50, 200, 200 };
+  MtkRectangle rect3 = { 100, 100, 300, 300 };
   const ClutterOffloadEntry *entry;
 
   plan = clutter_offloadable_actors_new ();
@@ -114,32 +117,52 @@ offload_plan_add_entries (void)
   g_object_ref_sink (actor1);
   actor2 = clutter_actor_new ();
   g_object_ref_sink (actor2);
+  actor3 = clutter_actor_new ();
+  g_object_ref_sink (actor3);
 
   region1 = mtk_region_create_rectangle (&rect1);
   region2 = mtk_region_create_rectangle (&rect2);
+  region3 = mtk_region_create_rectangle (&rect3);
 
   clutter_offloadable_actors_add_entry (plan, actor1,
                                   CLUTTER_OFFLOAD_TYPE_OPAQUE,
                                   region1,
-                                  /* poisoned = */ FALSE);
+                                  /* poisoned = */ FALSE,
+                                  /* occupied = */ FALSE);
   clutter_offloadable_actors_add_entry (plan, actor2,
                                   CLUTTER_OFFLOAD_TYPE_ALPHA,
                                   region2,
-                                  /* poisoned = */ TRUE);
+                                  /* poisoned = */ FALSE,
+                                  /* occupied = */ TRUE);
 
-  g_assert_cmpuint (clutter_offloadable_actors_get_n_entries (plan), ==, 2);
+  clutter_offloadable_actors_add_entry (plan, actor3,
+                                  CLUTTER_OFFLOAD_TYPE_OPAQUE,
+                                  region3,
+                                  /* poisoned = */ TRUE,
+                                  /* occupied = */ FALSE);
+
+  g_assert_cmpuint (clutter_offloadable_actors_get_n_entries (plan), ==, 3);
 
   entry = clutter_offloadable_actors_get_entry (plan, 0);
   g_assert_nonnull (entry);
   g_assert_true (entry->actor == actor1);
   g_assert_cmpint (entry->type, ==, CLUTTER_OFFLOAD_TYPE_OPAQUE);
   g_assert_false (entry->poisoned);
+  g_assert_false (entry->occupied);
 
   entry = clutter_offloadable_actors_get_entry (plan, 1);
   g_assert_nonnull (entry);
   g_assert_true (entry->actor == actor2);
   g_assert_cmpint (entry->type, ==, CLUTTER_OFFLOAD_TYPE_ALPHA);
+  g_assert_false (entry->poisoned);
+  g_assert_true (entry->occupied);
+
+  entry = clutter_offloadable_actors_get_entry (plan, 2);
+  g_assert_nonnull (entry);
+  g_assert_true (entry->actor == actor3);
+  g_assert_cmpint (entry->type, ==, CLUTTER_OFFLOAD_TYPE_OPAQUE);
   g_assert_true (entry->poisoned);
+  g_assert_false (entry->occupied);
 }
 
 static void
@@ -147,6 +170,7 @@ analyze_single_opaque (void)
 {
   g_autoptr (ClutterOffloadableActors) plan = NULL;
   g_autoptr (MtkRegion) poisoned = NULL;
+  g_autoptr (MtkRegion) occupied = NULL;
   ClutterActor *stage, *container, *offloadable;
   const ClutterOffloadEntry *entry;
 
@@ -165,8 +189,9 @@ analyze_single_opaque (void)
 
   plan = clutter_offloadable_actors_new ();
   poisoned = mtk_region_create ();
+  occupied = mtk_region_create ();
 
-  clutter_offloadable_analyze_children (container, NULL, plan, poisoned);
+  clutter_offloadable_analyze_children (container, NULL, plan, poisoned, occupied);
 
   g_assert_cmpuint (clutter_offloadable_actors_get_n_entries (plan), ==, 1);
 
@@ -174,6 +199,7 @@ analyze_single_opaque (void)
   g_assert_true (entry->actor == offloadable);
   g_assert_cmpint (entry->type, ==, CLUTTER_OFFLOAD_TYPE_OPAQUE);
   g_assert_false (entry->poisoned);
+  g_assert_false (entry->occupied);
 
   clutter_actor_destroy (container);
 }
@@ -183,6 +209,7 @@ analyze_two_opaque_non_overlapping (void)
 {
   g_autoptr (ClutterOffloadableActors) plan = NULL;
   g_autoptr (MtkRegion) poisoned = NULL;
+  g_autoptr (MtkRegion) occupied = NULL;
   ClutterActor *stage, *container, *top, *bottom;
   const ClutterOffloadEntry *entry;
 
@@ -205,8 +232,9 @@ analyze_two_opaque_non_overlapping (void)
 
   plan = clutter_offloadable_actors_new ();
   poisoned = mtk_region_create ();
+  occupied = mtk_region_create ();
 
-  clutter_offloadable_analyze_children (container, NULL, plan, poisoned);
+  clutter_offloadable_analyze_children (container, NULL, plan, poisoned, occupied);
 
   /* Front-to-back: top is encountered first */
   g_assert_cmpuint (clutter_offloadable_actors_get_n_entries (plan), ==, 2);
@@ -214,10 +242,12 @@ analyze_two_opaque_non_overlapping (void)
   entry = clutter_offloadable_actors_get_entry (plan, 0);
   g_assert_true (entry->actor == top);
   g_assert_false (entry->poisoned);
+  g_assert_false (entry->occupied);
 
   entry = clutter_offloadable_actors_get_entry (plan, 1);
   g_assert_true (entry->actor == bottom);
   g_assert_false (entry->poisoned);
+  g_assert_false (entry->occupied);
 
   clutter_actor_destroy (container);
 }
@@ -227,6 +257,7 @@ analyze_non_offloadable_alpha_poisons_below (void)
 {
   g_autoptr (ClutterOffloadableActors) plan = NULL;
   g_autoptr (MtkRegion) poisoned = NULL;
+  g_autoptr (MtkRegion) occupied = NULL;
   ClutterActor *stage, *container, *bottom_offloadable, *top_alpha;
   const ClutterOffloadEntry *entry;
 
@@ -251,14 +282,16 @@ analyze_non_offloadable_alpha_poisons_below (void)
 
   plan = clutter_offloadable_actors_new ();
   poisoned = mtk_region_create ();
+  occupied = mtk_region_create ();
 
-  clutter_offloadable_analyze_children (container, NULL, plan, poisoned);
+  clutter_offloadable_analyze_children (container, NULL, plan, poisoned, occupied);
 
   g_assert_cmpuint (clutter_offloadable_actors_get_n_entries (plan), ==, 1);
 
   entry = clutter_offloadable_actors_get_entry (plan, 0);
   g_assert_true (entry->actor == bottom_offloadable);
   g_assert_true (entry->poisoned);
+  g_assert_false (entry->occupied);
 
   clutter_actor_destroy (container);
 }
@@ -268,6 +301,7 @@ analyze_non_offloadable_opaque_does_not_poison (void)
 {
   g_autoptr (ClutterOffloadableActors) plan = NULL;
   g_autoptr (MtkRegion) poisoned = NULL;
+  g_autoptr (MtkRegion) occupied = NULL;
   ClutterActor *stage, *container, *bottom_offloadable, *top_opaque;
   CoglColor black;
   const ClutterOffloadEntry *entry;
@@ -294,14 +328,16 @@ analyze_non_offloadable_opaque_does_not_poison (void)
 
   plan = clutter_offloadable_actors_new ();
   poisoned = mtk_region_create ();
+  occupied = mtk_region_create ();
 
-  clutter_offloadable_analyze_children (container, NULL, plan, poisoned);
+  clutter_offloadable_analyze_children (container, NULL, plan, poisoned, occupied);
 
   g_assert_cmpuint (clutter_offloadable_actors_get_n_entries (plan), ==, 1);
 
   entry = clutter_offloadable_actors_get_entry (plan, 0);
   g_assert_true (entry->actor == bottom_offloadable);
   g_assert_false (entry->poisoned);
+  g_assert_true (entry->occupied);
 
   clutter_actor_destroy (container);
 }
@@ -311,6 +347,7 @@ analyze_invisible_actor_skipped (void)
 {
   g_autoptr (ClutterOffloadableActors) plan = NULL;
   g_autoptr (MtkRegion) poisoned = NULL;
+  g_autoptr (MtkRegion) occupied = NULL;
   ClutterActor *stage, *container, *offloadable;
 
   stage = clutter_test_get_stage ();
@@ -329,8 +366,9 @@ analyze_invisible_actor_skipped (void)
 
   plan = clutter_offloadable_actors_new ();
   poisoned = mtk_region_create ();
+  occupied = mtk_region_create ();
 
-  clutter_offloadable_analyze_children (container, NULL, plan, poisoned);
+  clutter_offloadable_analyze_children (container, NULL, plan, poisoned, occupied);
 
   g_assert_cmpuint (clutter_offloadable_actors_get_n_entries (plan), ==, 0);
 
@@ -342,6 +380,7 @@ analyze_offloadable_type_none_skipped (void)
 {
   g_autoptr (ClutterOffloadableActors) plan = NULL;
   g_autoptr (MtkRegion) poisoned = NULL;
+  g_autoptr (MtkRegion) occupied = NULL;
   ClutterActor *stage, *container, *offloadable;
 
   stage = clutter_test_get_stage ();
@@ -359,8 +398,9 @@ analyze_offloadable_type_none_skipped (void)
 
   plan = clutter_offloadable_actors_new ();
   poisoned = mtk_region_create ();
+  occupied = mtk_region_create ();
 
-  clutter_offloadable_analyze_children (container, NULL, plan, poisoned);
+  clutter_offloadable_analyze_children (container, NULL, plan, poisoned, occupied);
 
   g_assert_cmpuint (clutter_offloadable_actors_get_n_entries (plan), ==, 0);
 
@@ -372,6 +412,7 @@ analyze_alpha_offloadable_not_poisoned_when_clean (void)
 {
   g_autoptr (ClutterOffloadableActors) plan = NULL;
   g_autoptr (MtkRegion) poisoned = NULL;
+  g_autoptr (MtkRegion) occupied = NULL;
   ClutterActor *stage, *container, *offloadable;
   const ClutterOffloadEntry *entry;
 
@@ -390,14 +431,16 @@ analyze_alpha_offloadable_not_poisoned_when_clean (void)
 
   plan = clutter_offloadable_actors_new ();
   poisoned = mtk_region_create ();
+  occupied = mtk_region_create ();
 
-  clutter_offloadable_analyze_children (container, NULL, plan, poisoned);
+  clutter_offloadable_analyze_children (container, NULL, plan, poisoned, occupied);
 
   g_assert_cmpuint (clutter_offloadable_actors_get_n_entries (plan), ==, 1);
 
   entry = clutter_offloadable_actors_get_entry (plan, 0);
   g_assert_cmpint (entry->type, ==, CLUTTER_OFFLOAD_TYPE_ALPHA);
   g_assert_false (entry->poisoned);
+  g_assert_false (entry->occupied);
 
   clutter_actor_destroy (container);
 }
@@ -407,6 +450,7 @@ analyze_nested_offloadable (void)
 {
   g_autoptr (ClutterOffloadableActors) plan = NULL;
   g_autoptr (MtkRegion) poisoned = NULL;
+  g_autoptr (MtkRegion) occupied = NULL;
   ClutterActor *stage, *container, *subcontainer, *offloadable;
   const ClutterOffloadEntry *entry;
 
@@ -430,14 +474,16 @@ analyze_nested_offloadable (void)
 
   plan = clutter_offloadable_actors_new ();
   poisoned = mtk_region_create ();
+  occupied = mtk_region_create ();
 
-  clutter_offloadable_analyze_children (container, NULL, plan, poisoned);
+  clutter_offloadable_analyze_children (container, NULL, plan, poisoned, occupied);
 
   g_assert_cmpuint (clutter_offloadable_actors_get_n_entries (plan), ==, 1);
 
   entry = clutter_offloadable_actors_get_entry (plan, 0);
   g_assert_true (entry->actor == offloadable);
   g_assert_false (entry->poisoned);
+  g_assert_false (entry->occupied);
 
   clutter_actor_destroy (container);
 }
@@ -447,6 +493,7 @@ analyze_partial_overlap_poisons (void)
 {
   g_autoptr (ClutterOffloadableActors) plan = NULL;
   g_autoptr (MtkRegion) poisoned = NULL;
+  g_autoptr (MtkRegion) occupied = NULL;
   ClutterActor *stage, *container, *bottom, *top_alpha;
   const ClutterOffloadEntry *entry;
 
@@ -472,14 +519,16 @@ analyze_partial_overlap_poisons (void)
 
   plan = clutter_offloadable_actors_new ();
   poisoned = mtk_region_create ();
+  occupied = mtk_region_create ();
 
-  clutter_offloadable_analyze_children (container, NULL, plan, poisoned);
+  clutter_offloadable_analyze_children (container, NULL, plan, poisoned, occupied);
 
   g_assert_cmpuint (clutter_offloadable_actors_get_n_entries (plan), ==, 1);
 
   entry = clutter_offloadable_actors_get_entry (plan, 0);
   g_assert_true (entry->actor == bottom);
   g_assert_true (entry->poisoned);
+  g_assert_false (entry->occupied);
 
   clutter_actor_destroy (container);
 }
@@ -489,6 +538,7 @@ analyze_no_overlap_not_poisoned (void)
 {
   g_autoptr (ClutterOffloadableActors) plan = NULL;
   g_autoptr (MtkRegion) poisoned = NULL;
+  g_autoptr (MtkRegion) occupied = NULL;
   ClutterActor *stage, *container, *bottom, *top_alpha;
   const ClutterOffloadEntry *entry;
 
@@ -514,14 +564,16 @@ analyze_no_overlap_not_poisoned (void)
 
   plan = clutter_offloadable_actors_new ();
   poisoned = mtk_region_create ();
+  occupied = mtk_region_create ();
 
-  clutter_offloadable_analyze_children (container, NULL, plan, poisoned);
+  clutter_offloadable_analyze_children (container, NULL, plan, poisoned, occupied);
 
   g_assert_cmpuint (clutter_offloadable_actors_get_n_entries (plan), ==, 1);
 
   entry = clutter_offloadable_actors_get_entry (plan, 0);
   g_assert_true (entry->actor == bottom);
   g_assert_false (entry->poisoned);
+  g_assert_false (entry->occupied);
 
   clutter_actor_destroy (container);
 }
@@ -531,6 +583,7 @@ analyze_opaque_subtracts_poison (void)
 {
   g_autoptr (ClutterOffloadableActors) plan = NULL;
   g_autoptr (MtkRegion) poisoned = NULL;
+  g_autoptr (MtkRegion) occupied = NULL;
   ClutterActor *stage, *container, *bottom, *middle_opaque, *top_alpha;
   const ClutterOffloadEntry *entry;
 
@@ -562,8 +615,9 @@ analyze_opaque_subtracts_poison (void)
 
   plan = clutter_offloadable_actors_new ();
   poisoned = mtk_region_create ();
+  occupied = mtk_region_create ();
 
-  clutter_offloadable_analyze_children (container, NULL, plan, poisoned);
+  clutter_offloadable_analyze_children (container, NULL, plan, poisoned, occupied);
 
   /*
    * Front-to-back: top_alpha poisons, middle_opaque is poisoned but
@@ -575,10 +629,12 @@ analyze_opaque_subtracts_poison (void)
   entry = clutter_offloadable_actors_get_entry (plan, 0);
   g_assert_true (entry->actor == middle_opaque);
   g_assert_true (entry->poisoned);
+  g_assert_false (entry->occupied);
 
   entry = clutter_offloadable_actors_get_entry (plan, 1);
   g_assert_true (entry->actor == bottom);
   g_assert_false (entry->poisoned);
+  g_assert_true (entry->occupied);
 
   clutter_actor_destroy (container);
 }

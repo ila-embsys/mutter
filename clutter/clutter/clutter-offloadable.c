@@ -80,7 +80,8 @@ clutter_offloadable_actors_add_entry (ClutterOffloadableActors *actors,
                                       ClutterActor             *actor,
                                       ClutterOffloadType        type,
                                       MtkRegion                *region,
-                                      gboolean                  poisoned)
+                                      gboolean                  poisoned,
+                                      gboolean                  occupied)
 {
   ClutterOffloadEntry entry;
 
@@ -88,6 +89,7 @@ clutter_offloadable_actors_add_entry (ClutterOffloadableActors *actors,
   entry.type = type;
   entry.region = mtk_region_ref (region);
   entry.poisoned = poisoned;
+  entry.occupied = occupied;
 
   g_array_append_val (actors->entries, entry);
 }
@@ -286,11 +288,14 @@ static void
 analyze_offloadable_actor (ClutterActor             *actor,
                            ClutterStageView         *stage_view,
                            ClutterOffloadableActors *offloadable_actors,
-                           MtkRegion                *poisoned_region)
+                           MtkRegion                *poisoned_region,
+                           MtkRegion                *occupied_region)
 {
   g_autoptr (MtkRegion) region = NULL;
+  g_autoptr (MtkRegion) overlap = NULL;
   ClutterOffloadType type;
   gboolean is_poisoned = FALSE;
+  gboolean is_occupied = FALSE;
 
   type = clutter_offloadable_get_offload_type (CLUTTER_OFFLOADABLE (actor),
                                                stage_view,
@@ -301,30 +306,48 @@ analyze_offloadable_actor (ClutterActor             *actor,
 
   if (poisoned_region && !mtk_region_is_empty (poisoned_region))
     {
-      g_autoptr (MtkRegion) overlap = NULL;
-
       overlap = mtk_region_copy (region);
       mtk_region_intersect (overlap, poisoned_region);
 
       if (!mtk_region_is_empty (overlap))
-        {
           is_poisoned = TRUE;
+    }
 
-          if (type == CLUTTER_OFFLOAD_TYPE_ALPHA)
-            mtk_region_union (poisoned_region, region);
-        }
+  if (occupied_region && !mtk_region_is_empty (occupied_region))
+    {
+      overlap = mtk_region_copy (region);
+      mtk_region_intersect (overlap, occupied_region);
+
+      if (!mtk_region_is_empty (overlap))
+          is_occupied = TRUE;
     }
 
   clutter_offloadable_actors_add_entry (offloadable_actors, actor, type,
-                                        region, is_poisoned);
+                                        region, is_poisoned, is_occupied);
 
-  if (type == CLUTTER_OFFLOAD_TYPE_OPAQUE && poisoned_region)
-    mtk_region_subtract (poisoned_region, region);
+  if (type == CLUTTER_OFFLOAD_TYPE_OPAQUE)
+    {
+      if (poisoned_region)
+          mtk_region_subtract (poisoned_region, region);
+      
+      if (occupied_region)
+          mtk_region_union (occupied_region, region);
+    }
+
+  if (type == CLUTTER_OFFLOAD_TYPE_ALPHA)
+    {
+      if (poisoned_region)      
+          mtk_region_union (poisoned_region, region);
+      
+      if (occupied_region)
+          mtk_region_subtract (occupied_region, region);
+    }
 }
 
 static void
 analyze_non_offloadable_actor (ClutterActor *actor,
-                               MtkRegion    *poisoned_region)
+                               MtkRegion    *poisoned_region,
+                               MtkRegion    *occupied_region)
 {
   g_autoptr (MtkRegion) opaque_region = NULL;
 
@@ -335,6 +358,7 @@ analyze_non_offloadable_actor (ClutterActor *actor,
 
   if (opaque_region)
     {
+      mtk_region_union (occupied_region, opaque_region);
       mtk_region_subtract (poisoned_region, opaque_region);
       return;
     }
@@ -355,6 +379,7 @@ analyze_non_offloadable_actor (ClutterActor *actor,
 
     alpha_region = mtk_region_create_rectangle (&rect);
     mtk_region_union (poisoned_region, alpha_region);
+    mtk_region_subtract (occupied_region, alpha_region);
   }
 }
 
@@ -372,7 +397,8 @@ void
 clutter_offloadable_analyze_children (ClutterActor             *actor,
                                       ClutterStageView         *stage_view,
                                       ClutterOffloadableActors *offloadable_actors,
-                                      MtkRegion                *poisoned_region)
+                                      MtkRegion                *poisoned_region,
+                                      MtkRegion                *occupied_region)
 {
   ClutterActor *child;
   ClutterActorIter iter;
@@ -390,7 +416,7 @@ clutter_offloadable_analyze_children (ClutterActor             *actor,
           if (!actor_overlaps_view (child, stage_view))
             continue;
 
-          if (poisoned_region)
+          if (poisoned_region || occupied_region)
             {
               graphene_matrix_t child_transform, inverted;
 
@@ -402,17 +428,22 @@ clutter_offloadable_analyze_children (ClutterActor             *actor,
                 continue;
             }
 
+          clutter_offloadable_analyze_children (child, stage_view,
+                                                offloadable_actors,
+                                                poisoned_region, occupied_region);
+
           analyze_offloadable_actor (child, stage_view,
-                                     offloadable_actors, poisoned_region);
+                                     offloadable_actors,
+                                     poisoned_region, occupied_region);
         }
       else
         {
           clutter_offloadable_analyze_children (child, stage_view,
                                                 offloadable_actors,
-                                                poisoned_region);
+                                                poisoned_region, occupied_region);
 
           if (actor_overlaps_view (child, stage_view))
-            analyze_non_offloadable_actor (child, poisoned_region);
+            analyze_non_offloadable_actor (child, poisoned_region, occupied_region);
         }
     }
 }
