@@ -21,6 +21,7 @@
 #include "config.h"
 
 #include "clutter/clutter-solid-fill-actor.h"
+#include "clutter/clutter-offloadable.h"
 #include "compositor/clutter-utils.h"
 #include "compositor/meta-cullable.h"
 #include "compositor/meta-surface-actor-wayland.h"
@@ -38,12 +39,15 @@ struct _MetaSurfaceContainerActorWayland
 };
 
 static void surface_container_cullable_iface_init (MetaCullableInterface *iface);
+static void surface_container_offloadable_iface_init (ClutterOffloadableInterface *iface);
 
 G_DEFINE_TYPE_WITH_CODE (MetaSurfaceContainerActorWayland,
                          meta_surface_container_actor_wayland,
                          CLUTTER_TYPE_ACTOR,
                          G_IMPLEMENT_INTERFACE (META_TYPE_CULLABLE,
-                                                surface_container_cullable_iface_init))
+                                                surface_container_cullable_iface_init)
+                         G_IMPLEMENT_INTERFACE (CLUTTER_TYPE_OFFLOADABLE,
+                                                surface_container_offloadable_iface_init))
 
 struct _MetaWindowActorWayland
 {
@@ -55,11 +59,14 @@ struct _MetaWindowActorWayland
 };
 
 static void cullable_iface_init (MetaCullableInterface *iface);
+static void offloadable_iface_init (ClutterOffloadableInterface *iface);
 
 G_DEFINE_TYPE_WITH_CODE (MetaWindowActorWayland, meta_window_actor_wayland,
                          META_TYPE_WINDOW_ACTOR,
                          G_IMPLEMENT_INTERFACE (META_TYPE_CULLABLE,
-                                                cullable_iface_init))
+                                                cullable_iface_init)
+                         G_IMPLEMENT_INTERFACE (CLUTTER_TYPE_OFFLOADABLE,
+                                                offloadable_iface_init))
 
 typedef struct _SurfaceTreeTraverseData
 {
@@ -99,6 +106,35 @@ surface_container_cullable_iface_init (MetaCullableInterface *iface)
 {
   iface->cull_unobscured = surface_container_cull_unobscured;
   iface->cull_redraw_clip = surface_container_cull_redraw_clip;
+}
+
+static ClutterOffloadType
+surface_container_get_offload_type (ClutterOffloadable  *offloadable,
+                                    ClutterStageView    *stage_view,
+                                    MtkRegion          **out_region)
+{
+  MetaSurfaceContainerActorWayland *self = META_SURFACE_CONTAINER_ACTOR_WAYLAND (offloadable);
+  graphene_rect_t extents;
+  MtkRectangle rect;
+
+  clutter_actor_get_transformed_extents (CLUTTER_ACTOR (self), &extents);
+
+  rect = (MtkRectangle) {
+    .x = (int) extents.origin.x,
+    .y = (int) extents.origin.y,
+    .width = (int) extents.size.width,
+    .height = (int) extents.size.height,
+  };
+
+  *out_region = mtk_region_create_rectangle (&rect);
+
+  return CLUTTER_OFFLOAD_TYPE_NONE;
+}
+
+static void
+surface_container_offloadable_iface_init (ClutterOffloadableInterface *iface)
+{
+  iface->get_offload_type = surface_container_get_offload_type;
 }
 
 static void
@@ -341,6 +377,35 @@ cullable_iface_init (MetaCullableInterface *iface)
 {
   iface->cull_unobscured = meta_window_actor_wayland_cull_unobscured;
   iface->cull_redraw_clip = meta_window_actor_wayland_cull_redraw_clip;
+}
+
+static ClutterOffloadType
+meta_window_actor_wayland_get_offload_type (ClutterOffloadable  *offloadable,
+                                            ClutterStageView    *stage_view,
+                                            MtkRegion          **out_region)
+{
+  MetaWindowActor *self = META_WINDOW_ACTOR (offloadable);
+  graphene_rect_t extents;
+  MtkRectangle rect;
+
+  clutter_actor_get_transformed_extents (CLUTTER_ACTOR (self), &extents);
+
+  rect = (MtkRectangle) {
+    .x = (int) extents.origin.x,
+    .y = (int) extents.origin.y,
+    .width = (int) extents.size.width,
+    .height = (int) extents.size.height,
+  };
+
+  *out_region = mtk_region_create_rectangle (&rect);
+
+  return CLUTTER_OFFLOAD_TYPE_NONE;
+}
+
+static void
+offloadable_iface_init (ClutterOffloadableInterface *iface)
+{
+  iface->get_offload_type = meta_window_actor_wayland_get_offload_type;
 }
 
 static void
