@@ -400,6 +400,47 @@ update_scanout_feedback (MetaScanoutManager       *scanout_manager,
     }
 }
 
+static void
+disable_scanout_candidate (ClutterActor *actor)
+{
+  clutter_actor_disable_render_hole (actor);
+}
+
+static void
+update_scanout_candidate (ScanoutAssignment *assignment,
+                          ScanoutAssignment *old_assignment,
+                          ClutterFrame      *frame)
+{
+  g_return_if_fail (assignment);
+  g_return_if_fail (old_assignment);
+  g_return_if_fail (frame);
+
+  ClutterOffloadableOffloaded * current_offloadable = clutter_frame_get_offloaded (frame);
+
+  PlaneAssignment *current_primary = scanout_assignment_get_primary (assignment);
+  PlaneAssignment *old_primary = scanout_assignment_get_primary (old_assignment);
+  if (old_primary->surface && !current_primary->surface)
+    {
+      disable_scanout_candidate (CLUTTER_ACTOR(old_primary->surface_actor));
+    }
+
+  size_t n_overlays = scanout_assignment_get_n_overlays (old_assignment);
+  for (size_t i = 0; i < n_overlays; i++)
+    {
+      PlaneAssignment *old_overlay = scanout_assignment_get_overlay (old_assignment, i);
+      ClutterActor* clutter_actor = CLUTTER_ACTOR (old_overlay->surface_actor);
+
+      if (current_offloadable)
+        {
+          if (!clutter_offloadable_offloaded_contains_actor (current_offloadable, 
+                                                             clutter_actor))
+            disable_scanout_candidate (clutter_actor);
+        }
+      else
+        disable_scanout_candidate (clutter_actor);
+    }
+}
+
 static GList *
 get_available_overlay_planes (MetaKmsDevice *kms_device,
                               MetaKmsCrtc   *kms_crtc)
@@ -635,6 +676,11 @@ meta_scanout_manager_assign_planes (MetaScanoutManager       *scanout_manager,
                                        commit_data,
                                        commit_result_data_free);
 
+  if (!clutter_offloadable_offloaded_is_empty (offloaded))
+    clutter_frame_set_offloaded (frame, offloaded);
+
+  update_scanout_candidate (assignment, old_assignment, frame);
+
   scanout_manager->previous_assignment = g_steal_pointer (&assignment);
 
   g_array_set_size (scanout_manager->failed_assignments, 0);
@@ -642,9 +688,6 @@ meta_scanout_manager_assign_planes (MetaScanoutManager       *scanout_manager,
   update_scanout_feedback (scanout_manager, offload_actors, crtc_kms);
 
   plane_assignment_clear (&standin);
-
-  if (!clutter_offloadable_offloaded_is_empty (offloaded))
-    clutter_frame_set_offloaded (frame, offloaded);
 }
 
 MetaScanoutManager *
