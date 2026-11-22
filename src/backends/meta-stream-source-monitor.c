@@ -804,7 +804,7 @@ stage_paint:
     {
       MetaContext *context = meta_backend_get_context (backend);
       MetaDebugControl *debug_control = meta_context_get_debug_control (context);
-      ClutterPaintFlag paint_flags = CLUTTER_PAINT_FLAG_NONE;
+      ClutterPaintFlag paint_flags = CLUTTER_PAINT_FLAG_FORCE_SCANOUT;
       g_autoptr (ClutterColorState) blending_color_state = NULL;
       gboolean force_linear;
 
