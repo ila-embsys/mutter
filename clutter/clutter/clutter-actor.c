@@ -3555,7 +3555,8 @@ clutter_actor_paint (ClutterActor        *self,
 
   priv = self->priv;
 
-  if (priv->skip_paint)
+  ClutterPaintFlag paint_flags = clutter_paint_context_get_paint_flags (paint_context);
+  if (priv->skip_paint && !(paint_flags & CLUTTER_PAINT_FLAG_FORCE_SCANOUT))
     return;
 
   priv->propagated_one_redraw = FALSE;
