@@ -194,6 +194,12 @@ meta_kms_device_get_planes (MetaKmsDevice *device)
   return device->planes;
 }
 
+MetaKmsTestCache *
+meta_kms_device_get_test_cache (MetaKmsDevice *device)
+{
+  return meta_kms_impl_device_get_test_cache (device->impl_device);
+}
+
 static gboolean
 has_plane_with_type_for (MetaKmsDevice    *device,
                          MetaKmsCrtc      *crtc,

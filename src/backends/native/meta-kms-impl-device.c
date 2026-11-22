@@ -43,6 +43,7 @@
 #include "backends/native/meta-kms-private.h"
 #include "backends/native/meta-kms-utils.h"
 #include "backends/native/meta-thread-private.h"
+#include "backends/native/meta-kms-test-cache.h"
 
 #include "meta-default-modes.h"
 #include "meta-private-enum-types.h"
@@ -137,6 +138,8 @@ typedef struct _MetaKmsImplDevicePrivate
 
   MetaKmsInhibitSubset updates_inhibited_subset;
   GList *inhibited_updates;
+
+  MetaKmsTestCache *test_cache;
 } MetaKmsImplDevicePrivate;
 
 static void
@@ -286,6 +289,15 @@ meta_kms_impl_device_get_path (MetaKmsImplDevice *impl_device)
     meta_kms_impl_device_get_instance_private (impl_device);
 
   return priv->path;
+}
+
+MetaKmsTestCache *
+meta_kms_impl_device_get_test_cache (MetaKmsImplDevice *impl_device)
+{
+  MetaKmsImplDevicePrivate *priv =
+    meta_kms_impl_device_get_instance_private (impl_device);
+
+  return priv->test_cache;
 }
 
 static MetaDeviceFile *
@@ -2634,6 +2646,8 @@ meta_kms_impl_device_finalize (GObject *object)
 
   g_clear_fd (&priv->sync_file, NULL);
 
+  g_object_unref (priv->test_cache);
+
   G_OBJECT_CLASS (meta_kms_impl_device_parent_class)->finalize (object);
 }
 
@@ -2779,6 +2793,8 @@ meta_kms_impl_device_initable_init (GInitable     *initable,
 
   meta_thread_inhibit_realtime_in_impl (thread);
   priv->realtime_inhibited_pending_mode_set = TRUE;
+
+  priv->test_cache = meta_kms_test_cache_new ();
 
   return TRUE;
 }
