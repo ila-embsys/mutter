@@ -750,6 +750,7 @@ struct _ClutterActorPrivate
   guint needs_redraw : 1;
   guint needs_finish_layout : 1;
   guint stage_relative_modelview_valid : 1;
+  guint skip_paint : 1;
 };
 
 enum
@@ -3553,6 +3554,10 @@ clutter_actor_paint (ClutterActor        *self,
     return;
 
   priv = self->priv;
+
+  if (priv->skip_paint)
+    return;
+
   priv->propagated_one_redraw = FALSE;
 
   /* It's an important optimization that we consider painting of
@@ -5787,6 +5792,8 @@ clutter_actor_constructor (GType gtype,
                                           "Clutter shortcuts key controller",
                                           CLUTTER_ACTION (key_controller));
     }
+
+  self->priv->skip_paint = 0;
 
   return retval;
 }
@@ -13501,6 +13508,32 @@ clutter_actor_uninhibit_culling (ClutterActor *actor)
   priv->inhibit_culling_counter--;
   if (priv->inhibit_culling_counter == 0)
     _clutter_actor_set_enable_paint_unmapped (actor, FALSE);
+}
+
+void
+clutter_actor_set_skip_paint (ClutterActor *actor,
+                              gboolean      skip_paint)
+{
+  ClutterActorPrivate *priv;
+
+  g_return_if_fail (CLUTTER_IS_ACTOR (actor));
+
+  priv = actor->priv;
+
+  priv->skip_paint = skip_paint;
+}
+
+gboolean
+clutter_actor_get_skip_paint (ClutterActor *actor)
+{
+  ClutterActorPrivate *priv;
+
+  if (!actor)
+    return FALSE;
+
+  priv = actor->priv;
+
+  return priv->skip_paint;
 }
 
 /* Allows you to disable applying the actors model view transform during
