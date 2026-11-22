@@ -64,4 +64,7 @@ gboolean meta_surface_actor_is_opaque (MetaSurfaceActor *actor);
 gboolean meta_surface_actor_is_frozen (MetaSurfaceActor *actor);
 void meta_surface_actor_set_frozen (MetaSurfaceActor *actor,
                                     gboolean          frozen);
+
+gboolean meta_surface_actor_get_frame_time_estimation (MetaSurfaceActor *actor,
+                                                       gint64 *frametime_out_us);
 G_END_DECLS
