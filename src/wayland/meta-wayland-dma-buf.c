@@ -615,12 +615,30 @@ has_modifier (GArray   *modifiers,
   return FALSE;
 }
 
+static MetaKmsPlane*
+crtc_get_overlay_plane (MetaCrtcKms *crtc_kms)
+{
+  MetaKmsCrtc *kms_crtc = meta_crtc_kms_get_kms_crtc (crtc_kms);
+  GList *planes = meta_kms_device_get_planes (meta_kms_crtc_get_device (kms_crtc));
+  GList *iter;
+  for(iter = planes; iter; iter = iter->next)
+    {
+      MetaKmsPlane *plane = iter->data;
+
+      if (meta_kms_plane_get_plane_type (plane) == META_KMS_PLANE_TYPE_OVERLAY)
+        return plane;
+    }
+
+  return NULL;
+}
+
 static gboolean
 crtc_supports_modifier (MetaCrtcKms *crtc_kms,
                         uint32_t     drm_format,
                         uint64_t     drm_modifier)
 {
-  MetaKmsPlane *plane = meta_crtc_kms_get_assigned_primary_plane (crtc_kms);
+  // TODO maybe change to getting the assigned the plane for validation
+  MetaKmsPlane *plane = crtc_get_overlay_plane (crtc_kms);
   GArray *crtc_modifiers;
 
   g_return_val_if_fail (plane, FALSE);
@@ -740,13 +758,6 @@ meta_wayland_dma_buf_try_acquire_scanout (MetaWaylandBuffer     *buffer,
   scanout = cogl_scanout_new (COGL_SCANOUT_BUFFER (g_steal_pointer (&fb)),
                               dst_rect);
   cogl_scanout_set_src_rect (scanout, src_rect);
-
-  if (!meta_onscreen_native_is_buffer_scanout_compatible (onscreen, scanout))
-    {
-      meta_topic (META_DEBUG_RENDER,
-                  "Buffer not scanout compatible (see also KMS debug topic)");
-      return NULL;
-    }
 
   return g_steal_pointer (&scanout);
 }
@@ -1473,11 +1484,21 @@ update_surface_feedback_tranches (MetaWaylandDmaBufSurfaceFeedback *surface_feed
 {
   MetaCrtc *crtc;
 
+  MetaWaylandSurface *surface = surface_feedback->surface;
+  MetaSurfaceActor *surface_actor = meta_wayland_surface_get_actor (surface);
+  ClutterActor *clutter_actor = CLUTTER_ACTOR (surface_actor);
+
   crtc = meta_wayland_surface_get_scanout_candidate (surface_feedback->surface);
   if (crtc)
-    ensure_scanout_tranche (surface_feedback, crtc);
+    {
+      ensure_scanout_tranche (surface_feedback, crtc);
+      clutter_actor_set_skip_paint (clutter_actor, TRUE);
+    }
   else
-    clear_scanout_tranche (surface_feedback);
+    {
+      clear_scanout_tranche (surface_feedback);
+      clutter_actor_set_skip_paint (clutter_actor, FALSE);
+    }
 }
 
 static void

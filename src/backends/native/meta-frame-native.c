@@ -31,6 +31,7 @@ struct _MetaFrameNative
 
   MetaDrmBuffer *buffer;
   CoglScanout *scanout;
+  GList *scanout_list;
 
   MetaKmsUpdate *kms_update;
 
@@ -49,6 +50,8 @@ meta_frame_native_release (ClutterFrame *frame)
   g_clear_pointer (&frame_native->kms_update, meta_kms_update_free);
   g_clear_object (&frame_native->buffer);
   g_clear_object (&frame_native->scanout);
+  g_list_free_full (frame_native->scanout_list, g_object_unref);
+  g_return_if_fail (!frame_native->kms_update);
 }
 
 MetaFrameNative *
@@ -109,17 +112,23 @@ meta_frame_native_get_buffer (MetaFrameNative *frame_native)
   return frame_native->buffer;
 }
 
-void
-meta_frame_native_set_scanout (MetaFrameNative *frame_native,
-                               CoglScanout     *scanout)
+MetaDrmBuffer *
+meta_frame_native_get_primary_buffer (MetaFrameNative *frame_native)
 {
-  g_set_object (&frame_native->scanout, scanout);
+  return frame_native->buffer;
 }
 
-CoglScanout *
+void
+meta_frame_native_set_scanout (MetaFrameNative *frame_native,
+                               GList           *scanout_list)
+{
+  frame_native->scanout_list = g_steal_pointer (&scanout_list);
+}
+
+GList*
 meta_frame_native_get_scanout (MetaFrameNative *frame_native)
 {
-  return frame_native->scanout;
+  return frame_native->scanout_list;
 }
 
 void

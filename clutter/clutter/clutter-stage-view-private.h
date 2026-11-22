@@ -78,7 +78,7 @@ CLUTTER_EXPORT
 void clutter_stage_view_remove_scanout_clip (ClutterStageView *view);
 
 CLUTTER_EXPORT
-CoglScanout * clutter_stage_view_take_scanout (ClutterStageView *view);
+GList * clutter_stage_view_take_scanout (ClutterStageView *view);
 
 CLUTTER_EXPORT
 void clutter_stage_view_schedule_update (ClutterStageView *view);
