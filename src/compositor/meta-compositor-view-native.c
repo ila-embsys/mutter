@@ -415,6 +415,16 @@ find_overlay_candidates (MetaCompositorView *compositor_view,
 
   stage_view = meta_compositor_view_get_stage_view (compositor_view);
   MetaStageView *view = META_STAGE_VIEW (stage_view);
+  const char *actor_desc = G_OBJECT_TYPE_NAME (clutter_actor);
+
+  if (META_IS_WINDOW_ACTOR (clutter_actor))
+    {
+      MetaWindow *window =
+        meta_window_actor_get_meta_window (META_WINDOW_ACTOR (clutter_actor));
+      if (window)
+        actor_desc = meta_window_get_description (window);
+    }
+
   clutter_actor_get_content_box (clutter_actor, &actor_bounding_box);
   clutter_stage_view_get_layout (stage_view, &view_rect);
 
@@ -433,7 +443,8 @@ find_overlay_candidates (MetaCompositorView *compositor_view,
       !intersects)
     {
       meta_topic (META_DEBUG_RENDER,
-                  "No overlay candidate: window is hidden or transparent or has no content");
+                  "Overlay skip [%s]: visible=%d opacity=%u area=%.1f intersects=%d",
+                  actor_desc, is_visible, opacity, actor_area, intersects);
       return TRUE;
     }
 
@@ -451,6 +462,9 @@ find_overlay_candidates (MetaCompositorView *compositor_view,
 
       if(meta_window_actor_effect_in_progress (window_actor))
         {
+          meta_topic (META_DEBUG_RENDER,
+                      "Overlay skip [%s]: window-actor effect in progress",
+                      actor_desc);
           map_rect_to_device_space (compositor_view, clutter_actor, &device_space_actor_rect);
           mtk_region_union_rectangle (effected_region, &device_space_actor_rect);
           return TRUE;
@@ -463,7 +477,12 @@ find_overlay_candidates (MetaCompositorView *compositor_view,
           surface = meta_surface_actor_wayland_get_surface (surface_actor_wayland);
         }
       else
-        return FALSE;
+        {
+          meta_topic (META_DEBUG_RENDER,
+                      "Overlay abort [%s]: window-actor has no scanout candidate surface",
+                      actor_desc);
+          return FALSE;
+        }
     }
 
   gboolean has_surface_actor = surface_actor != NULL;
@@ -490,9 +509,11 @@ find_overlay_candidates (MetaCompositorView *compositor_view,
       is_overlapped_with_sw_cursor = !meta_stage_view_is_cursor_overlay_inhibited (view) &&
                                      surface_actor_has_overlapping_cursor_overlays (compositor, compositor_view, surface_actor);
 
-      gint64 frametime_us;
+      gint64 frametime_us = -1;
+      gboolean has_frametime =
+        meta_surface_actor_get_frame_time_estimation (surface_actor, &frametime_us);
 
-      if (meta_surface_actor_get_frame_time_estimation (surface_actor, &frametime_us))
+      if (has_frametime)
         {
           surface_frequent_updates = frametime_us < (G_TIME_SPAN_SECOND / 20);
         }
@@ -504,6 +525,25 @@ find_overlay_candidates (MetaCompositorView *compositor_view,
                                   clutter_actor,
                                   meta_shaped_texture_get_opaque_region (texture),
                                   &device_space_opaque_region);
+
+      meta_topic (META_DEBUG_RENDER,
+                  "Overlay check [%s]: freq=%d (has_ft=%d ft_us=%" G_GINT64_FORMAT ") "
+                  "dmabuf=%d color_ok=%d opaque=%d (has_alpha=%d has_opaque_region=%d) "
+                  "sw_cursor=%d not_covered=%d not_effected=%d rect=%d,%d+%dx%d",
+                  actor_desc,
+                  surface_frequent_updates,
+                  has_frametime,
+                  frametime_us,
+                  has_dmabuf_attribs,
+                  valid_color_state_for_scanout,
+                  is_fully_opaque,
+                  texture ? meta_shaped_texture_has_alpha (texture) : -1,
+                  texture ? (meta_shaped_texture_get_opaque_region (texture) != NULL) : -1,
+                  is_overlapped_with_sw_cursor,
+                  notCoveredByOpaque,
+                  notIntersectsEffected,
+                  device_space_actor_rect.x, device_space_actor_rect.y,
+                  device_space_actor_rect.width, device_space_actor_rect.height);
     }
 
   if (has_surface_actor &&
@@ -519,13 +559,21 @@ find_overlay_candidates (MetaCompositorView *compositor_view,
       if (is_occupied_intersects)
         {
           gboolean is_opaque = mtk_region_contains_rectangle (device_space_opaque_region, &device_space_actor_rect) == MTK_REGION_OVERLAP_IN;
+          meta_topic (META_DEBUG_RENDER,
+                      "Overlay [%s]: intersects occupied_region (underlay needed, is_opaque=%d)%s",
+                      actor_desc, is_opaque, !is_opaque ? " -> aborting" : "");
           if (!is_opaque)
             return FALSE;
 
           // *underlay_candidates = g_list_prepend (*underlay_candidates, surface_actor);
         }
       else
-        *overlay_candidates = g_list_prepend (*overlay_candidates, surface_actor);
+        {
+          *overlay_candidates = g_list_prepend (*overlay_candidates, surface_actor);
+          meta_topic (META_DEBUG_RENDER,
+                      "Overlay candidate accepted [%s]: count=%u/%u",
+                      actor_desc, g_list_length (*overlay_candidates), max_overlay_count);
+        }
 
       // TODO Also Check Max Scanout & Underlay Count once underlay is considered
       if (g_list_length (*overlay_candidates) > max_overlay_count)
@@ -641,7 +689,11 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
   CoglOnscreen *onscreen;
 
   if (meta_get_debug_paint_flags () & META_DEBUG_PAINT_DISABLE_DIRECT_SCANOUT)
-    return FALSE;
+    {
+      meta_topic (META_DEBUG_RENDER,
+                  "No direct scanout candidate: disabled via debug paint flag");
+      return FALSE;
+    }
 
   if (meta_compositor_is_unredirect_inhibited (compositor))
     {
@@ -652,6 +704,8 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
 
   if (!is_single_output_system (compositor_view))
     {
+      meta_topic (META_DEBUG_RENDER,
+                  "No direct scanout candidate: multi-output system (active CRTCs > 1)");
       return FALSE;
     }
 
@@ -668,6 +722,9 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
   GList *iter = NULL;
 
   probe_plane_budget (compositor_view, &max_scanout_count, &max_overlay_count);
+  meta_topic (META_DEBUG_RENDER,
+              "Overlay scanout search: window_actors=%u max_scanout=%u max_overlay=%u",
+              g_list_length (window_actors), max_scanout_count, max_overlay_count);
   for (iter = g_list_last (window_actors); iter != NULL; iter = iter->prev)
     {
       ClutterActor *clutter_actor = CLUTTER_ACTOR (iter->data);
@@ -720,6 +777,12 @@ find_scanout_candidate (MetaCompositorView  *compositor_view,
   *crtc_out = crtc;
   *onscreen_out = COGL_ONSCREEN (framebuffer);
   *overlay_candidates_out = overlay_candidates;
+
+  if (*overlay_candidates_out == NULL)
+    {
+      meta_topic (META_DEBUG_RENDER,
+                  "No direct scanout candidate: 0 overlay candidates found");
+    }
 
   return *overlay_candidates_out != NULL;
 }
@@ -797,6 +860,14 @@ acquire_scanout_for_candidates (MetaCompositorView *compositor_view,
       if (scanout)
         {
           *scanout_candidates_out = g_list_prepend (*scanout_candidates_out, scanout);
+        }
+      else
+        {
+          meta_topic (META_DEBUG_RENDER,
+                      "Overlay scanout acquire failed for surface %p (buffer=%p use_count=%u)",
+                      surface,
+                      surface ? surface->buffer : NULL,
+                      (surface && surface->buffer) ? surface->buffer->use_count : 0);
         }
     }
 }
@@ -906,9 +977,17 @@ meta_compositor_view_native_maybe_assign_scanout (MetaCompositorViewNative *view
                   g_list_free_full (g_steal_pointer (&scanout_candidates), g_object_unref);
                 }
             }
+          else
+            {
+              meta_topic (META_DEBUG_RENDER,
+                          "No scanouts acquired for %u overlay candidates",
+                          g_list_length (overlay_candidates));
+            }
         }
       else
         {
+          meta_topic (META_DEBUG_RENDER,
+                      "Skipping overlay atomic check: cached failure in MetaKmsTestCache");
           g_clear_pointer (&overlay_candidates, g_list_free);
         }
     }
